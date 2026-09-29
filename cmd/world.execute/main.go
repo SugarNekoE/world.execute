@@ -44,7 +44,7 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 		logger = log.New(stderr, "world.execute: ", 0)
 	}
 	if !cfg.Quiet {
-		fmt.Fprintf(stderr, "world.execute(me); v%s — Mili, Miracle Milk (2015)\n", version)
+		fmt.Fprintf(stderr, "world.execute(me); v%s - Mili, Miracle Milk (2015)\n", version)
 	}
 
 	if err := cfg.Resolve(); err != nil {
@@ -79,6 +79,7 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 	}
 	screen := term.NewScreen(defW, defH, mode, t.Writer())
 	screen.Resize(t.Size())
+	screen.SetASCII(cfg.Charset == "ascii")
 
 	analysis := analyse(cfg, stderr, logger)
 
@@ -115,7 +116,7 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 
 	t.Enter()
 	defer t.Restore()
-	t.WriteTitle("world.execute(me); — Mili")
+	t.WriteTitle("world.execute(me); - Mili")
 
 	return loop(cfg, t, screen, dir, ctrl, &ctx, player, total, stderr)
 }
@@ -300,11 +301,11 @@ func seekTarget(now, delta, total time.Duration) time.Duration {
 func backendNote(kind string) string {
 	switch kind {
 	case audio.PlayerMPV:
-		return " — seeking and volume are enabled"
+		return " - seeking and volume are enabled"
 	case audio.PlayerFFplay:
-		return " — seeking restarts playback, volume is fixed"
+		return " - seeking restarts playback, volume is fixed"
 	default:
-		return " — silent: seeking and volume move the animation only (install mpv for sound)"
+		return " - silent: seeking and volume move the animation only (install mpv for sound)"
 	}
 }
 
@@ -403,7 +404,7 @@ func analyse(cfg *config.Config, stderr *os.File, logger *log.Logger) *audio.Ana
 		return nil
 	}
 	if !cfg.Quiet {
-		fmt.Fprintln(stderr, "analysing audio …")
+		fmt.Fprintln(stderr, "analysing audio ...")
 	}
 	a, err := audio.Analyze(cfg.AudioPath, cfg.FPS)
 	if err != nil {
