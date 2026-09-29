@@ -233,6 +233,10 @@ func loop(cfg *config.Config, t *term.Terminal, screen *term.Screen, dir *scene.
 				return 0
 			}
 			act := ctrl.Handle(control.Map(key))
+			if idx, ok := control.ChapterIndex(act); ok && idx < len(scene.Chapters) {
+				player.Seek(min(scene.Chapters[idx].At, max(total-200*time.Millisecond, 0)))
+				act = control.None
+			}
 			switch act {
 			case control.Quit:
 				return 0
