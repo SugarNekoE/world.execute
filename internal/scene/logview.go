@@ -178,6 +178,9 @@ func DrawWordLine(s *term.Screen, x, y int, line lyric.Line, t time.Duration, pa
 		switch {
 		case i == current:
 			fg, attr = pal.Accent, term.Bold
+			if t-w.Time < 110*time.Millisecond {
+				attr |= term.Reverse
+			}
 		case IsKeyword(w.Text):
 			fg, attr = pal.Kind, term.Bold
 		}

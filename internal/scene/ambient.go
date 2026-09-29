@@ -1,8 +1,10 @@
 package scene
 
 import (
+	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"world.execute/internal/term"
@@ -23,6 +25,9 @@ type Ambient struct {
 	ready bool
 
 	rings []time.Duration
+
+	streams [][]rune
+	streamW int
 }
 
 type ambientStar struct {
@@ -82,11 +87,13 @@ func (a *Ambient) Draw(ctx *Context, area Rect) {
 	}
 	a.updatePulse(ctx)
 
+	a.drawStreams(ctx, area)
 	a.drawStars(ctx, area, energy)
 	a.drawGrid(ctx, area)
 	a.drawWall(ctx, area, energy)
 	a.drawPulse(ctx, area)
 	a.drawRings(ctx, area)
+	a.drawSparks(ctx, area)
 }
 
 func (a *Ambient) updatePulse(ctx *Context) {
@@ -292,4 +299,114 @@ func wallFollow(dt float64, rising bool) float32 {
 		tau = 0.010
 	}
 	return float32(1 - math.Exp(-dt/tau))
+}
+
+// streamTokens are the words of the data streams that scroll through empty
+// space.
+var streamTokens = []string{
+	"SYN", "ACK", "FIN", "RST", "GET /", "POST /", "EXEC", "FORK", "KILL -9", "root@sim", "sudo", "chmod +x",
+	"rwxr-xr-x", "0xDEADBEEF", "0xC0FFEE", "NULL", "malloc()", "free()", "ptr=", "tcp/443", "udp/53", "ssh",
+	"sha256:", "[ OK ]", "[FAIL]", "ping", "ttl=64", "mem", "irq", "cpu0", "stack", "heap", "world.execute",
+}
+
+func streamText(seed int64, row, length int) []rune {
+	var b strings.Builder
+	for i := 0; b.Len() < length+64; i++ {
+		h := uint64(hashSeed(seed, row*7919+i))
+		switch h % 6 {
+		case 0:
+			fmt.Fprintf(&b, "0x%08X", uint32(h>>8))
+		case 1:
+			fmt.Fprintf(&b, "%02X %02X %02X %02X", h>>8&0xff, h>>16&0xff, h>>24&0xff, h>>32&0xff)
+		case 2:
+			fmt.Fprintf(&b, "%d.%d.%d.%d:%d", h>>8&0xff, h>>16&0xff, h>>24&0xff, h>>32&0xff, 1024+h>>40&0x3fff)
+		case 3:
+			fmt.Fprintf(&b, "%08b", byte(h>>8))
+		default:
+			b.WriteString(streamTokens[h>>8%uint64(len(streamTokens))])
+		}
+		b.WriteString("  ")
+	}
+	return []rune(b.String())
+}
+
+// drawStreams scrolls lines of hex, addresses and packet words through the
+// free cells, alternating direction row by row, with a bright band travelling
+// along each. It only lands on cells nothing else has claimed.
+func (a *Ambient) drawStreams(ctx *Context, area Rect) {
+	wall := min(area.H/4, 5)
+	usable := area.H - wall - 1
+	if usable < 6 || area.W < 24 {
+		return
+	}
+	if len(a.streams) == 0 || a.streamW != area.W {
+		a.streamW = area.W
+		a.streams = a.streams[:0]
+		for i := range 8 {
+			a.streams = append(a.streams, streamText(a.seed, i, area.W*8))
+		}
+	}
+	pal := ctx.Palette
+	t := ctx.Sec(ctx.T)
+	rows := min(usable/4, 6)
+	for i := range rows {
+		y := area.Y + 1 + (i*usable)/rows + int(uint64(hashSeed(a.seed, i))%3)
+		text := a.streams[i%len(a.streams)]
+		speed := 7 + float64(uint64(hashSeed(a.seed, i+40))%14)
+		off := int(t * speed)
+		if i%2 == 1 {
+			off = -off
+		}
+		for x := range area.W {
+			idx := ((x+off)%len(text) + len(text)) % len(text)
+			ch := text[idx]
+			if ch == ' ' {
+				continue
+			}
+			fg, attr := Blend(pal.Shadow, pal.Accent, 0.38), term.Attr(0)
+			if band := ((x + off) % 96); band >= 0 && band < 9 {
+				fg, attr = Blend(pal.Shadow, pal.Accent, 0.85), term.Bold
+			}
+			a.put(ctx, area.X+x, y, ch, fg, attr)
+		}
+	}
+}
+
+const sparkLife = 1500 * time.Millisecond
+
+var sparkGlyphs = []rune{'✦', '+', '·'}
+
+// drawSparks throws a fountain of sparks from the middle of the story area
+// for every ring, so a shouted keyword bursts and rains down.
+func (a *Ambient) drawSparks(ctx *Context, area Rect) {
+	first := sort.Search(len(a.rings), func(i int) bool { return a.rings[i] > ctx.T-sparkLife })
+	pal := ctx.Palette
+	cx := float64(area.X) + float64(area.W)/2
+	cy := float64(area.Y) + float64(area.H)*0.55
+	for _, at := range a.rings[first:] {
+		age := ctx.T - at
+		if age < 0 {
+			break
+		}
+		t := age.Seconds()
+		life := float64(age) / float64(sparkLife)
+		glyph := sparkGlyphs[min(int(life*3), 2)]
+		for i := range 18 {
+			h := uint64(hashSeed(a.seed, int(at/time.Millisecond)*31+i))
+			r1 := float64(h&0xffff) / 65535
+			r2 := float64(h>>16&0xffff) / 65535
+			ang := -math.Pi/2 + (r1-0.5)*2.6
+			speed := 10 + 22*r2
+			x := int(math.Round(cx + speed*math.Cos(ang)*t*1.7))
+			y := int(math.Round(cy + speed*math.Sin(ang)*t*0.8 + 0.5*16*t*t))
+			if x < area.X || x >= area.Right() || y < area.Y || y >= area.Bottom() {
+				continue
+			}
+			tint := pal.Accent
+			if i%2 == 1 {
+				tint = pal.Accent2
+			}
+			a.put(ctx, x, y, glyph, Blend(pal.Shadow, tint, 0.45+0.5*(1-life)), term.Bold)
+		}
+	}
 }

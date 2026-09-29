@@ -159,14 +159,17 @@ func Theme(name string) map[string]Palette {
 
 // Context carries everything a scene needs for one frame.
 type Context struct {
-	Screen    *term.Screen
-	Lyrics    *lyric.Track
-	Analysis  *audio.Analysis
-	Palette   Palette
-	Section   string
-	Area      Rect
-	Header    Rect
-	Transport Rect
+	Screen   *term.Screen
+	Lyrics   *lyric.Track
+	Analysis *audio.Analysis
+	Palette  Palette
+	Section  string
+	// SectionAge is how long the current section has been playing, zero while
+	// it is still being wiped in.
+	SectionAge time.Duration
+	Area       Rect
+	Header     Rect
+	Transport  Rect
 
 	T      time.Duration
 	DT     time.Duration

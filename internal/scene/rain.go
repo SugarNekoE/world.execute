@@ -155,6 +155,20 @@ func (g *Glitch) Amount(ctx *Context, base float64) float64 {
 	return math.Min(amount, 1.6)
 }
 
+// Impact is how hard the latest listed hit is still landing at t, from 1 at the
+// hit falling to 0 a quarter of a second later.
+func (g *Glitch) Impact(t time.Duration) float64 {
+	best := 0.0
+	for _, h := range g.hits {
+		age := (t - h).Seconds()
+		if age < 0 || age > 0.25 {
+			continue
+		}
+		best = math.Max(best, math.Exp(-age/0.09))
+	}
+	return best
+}
+
 // Draw applies the glitch to the area. Amounts below a small floor are ignored
 // so that ordinary playback is clean and glitches stay punctuation.
 func (g *Glitch) Draw(ctx *Context, area Rect, amount float64) {

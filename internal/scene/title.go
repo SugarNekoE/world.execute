@@ -213,7 +213,7 @@ func (tb *TitleBanner) DrawHeader(ctx *Context, r Rect, section string) {
 		return
 	}
 
-	label := "▸ " + strings.ToUpper(section)
+	label := "▸ " + scramble(strings.ToUpper(section), ctx.SectionAge, ctx.Seed)
 	labelW := term.StringWidth(label)
 	s.Text(r.X+1, r.Y+1, label, Fade(pal.Accent, pal.Shadow, fade), term.ColorDefault, term.Bold)
 
@@ -229,4 +229,24 @@ func charsOf(chars []bannerChar) []rune {
 		out[i] = c.ch
 	}
 	return out
+}
+
+// scramble decodes text into place: each letter cycles through noise until its
+// turn comes, left to right, a fraction of a second after a section begins.
+func scramble(text string, age time.Duration, seed int64) string {
+	const settle = 140 * time.Millisecond
+	const perLetter = 26 * time.Millisecond
+	if age >= settle+time.Duration(len([]rune(text)))*perLetter {
+		return text
+	}
+	slot := int(age / (45 * time.Millisecond))
+	runes := []rune(text)
+	for i, r := range runes {
+		if r == ' ' || age >= settle+time.Duration(i)*perLetter {
+			continue
+		}
+		h := uint64(hashSeed(seed, slot*97+i))
+		runes[i] = rainAlphabet[h%uint64(len(rainAlphabet))]
+	}
+	return string(runes)
 }

@@ -837,3 +837,326 @@ func TestBarMarksTheChapters(t *testing.T) {
 		t.Error("chapter three should be marked on a 100 cell bar")
 	}
 }
+
+func testScreen(w, h int) *term.Screen {
+	var buf bytes.Buffer
+	return term.NewScreen(w, h, term.ColorTrue, bufio.NewWriter(&buf))
+}
+
+func countBraille(s *term.Screen) int {
+	n := 0
+	for y := range s.H {
+		for x := range s.W {
+			if r := s.At(x, y).R; r >= 0x2800 && r <= 0x28ff && r != 0x2800 {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func TestStreamsFlowAroundText(t *testing.T) {
+	s := testScreen(100, 30)
+	a := NewAmbient(2)
+	ctx := &Context{Screen: s, Palette: Palettes["verse"], T: 4 * time.Second, Area: Rect{0, 3, 100, 24}}
+	for y := 4; y < 26; y++ {
+		s.Text(30, y, strings.Repeat("W", 40), term.ColorDefault, term.ColorDefault, 0)
+	}
+	a.drawStreams(ctx, ctx.Area)
+	painted := 0
+	for y := range 30 {
+		for x := range 100 {
+			inText := x >= 30 && x < 70 && y >= 4 && y < 26
+			c := s.At(x, y)
+			if inText && c.R != 'W' {
+				t.Fatalf("a stream overwrote text at %d,%d: %q", x, y, c.R)
+			}
+			if !inText && c.R != ' ' {
+				painted++
+			}
+		}
+	}
+	if painted < 40 {
+		t.Errorf("streams painted only %d cells", painted)
+	}
+	tiny := testScreen(10, 4)
+	a.drawStreams(&Context{Screen: tiny, Palette: Palettes["verse"], Area: Rect{0, 0, 10, 4}}, Rect{0, 0, 10, 4})
+	if strings.TrimSpace(gridText(tiny)) != "" {
+		t.Error("streams should skip a tiny area")
+	}
+}
+
+func TestStreamRowsScrollAndAlternate(t *testing.T) {
+	area := Rect{0, 3, 100, 24}
+	frame := func(at time.Duration) string {
+		s := testScreen(100, 30)
+		a := NewAmbient(2)
+		a.drawStreams(&Context{Screen: s, Palette: Palettes["verse"], T: at, Area: area}, area)
+		return gridText(s)
+	}
+	if frame(time.Second) == frame(1500*time.Millisecond) {
+		t.Error("the streams should move")
+	}
+	if frame(time.Second) != frame(time.Second) {
+		t.Error("streams must be deterministic")
+	}
+}
+
+func TestSparksBurstAndFall(t *testing.T) {
+	s := testScreen(100, 30)
+	a := NewAmbient(3)
+	a.SetRings([]time.Duration{time.Second})
+	ctx := &Context{Screen: s, Palette: Palettes["verse"], Area: Rect{0, 3, 100, 24}}
+	count := func(at time.Duration) int {
+		s.Clear()
+		ctx.T = at
+		a.drawSparks(ctx, ctx.Area)
+		n := 0
+		for y := range 30 {
+			for x := range 100 {
+				if s.At(x, y).R != ' ' {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	if n := count(1500 * time.Millisecond); n < 8 {
+		t.Errorf("sparks in flight number only %d", n)
+	}
+	if n := count(500 * time.Millisecond); n != 0 {
+		t.Errorf("%d sparks before the keyword", n)
+	}
+	if n := count(4 * time.Second); n != 0 {
+		t.Errorf("%d sparks after they burned out", n)
+	}
+}
+
+func TestChromaticSplitOnlyLandsOnBlankCells(t *testing.T) {
+	s := testScreen(60, 20)
+	d := &Director{glitch: NewGlitch(time.Second)}
+	ctx := &Context{Screen: s, Palette: Palettes["glitch"], Area: Rect{0, 2, 60, 16}}
+	s.Text(20, 10, "HIT", term.ColorDefault, term.ColorDefault, 0)
+	s.Text(23, 10, "X", term.ColorDefault, term.ColorDefault, 0)
+
+	ctx.T = 5 * time.Second
+	d.chromatic(ctx)
+	if s.At(18, 10).R != ' ' {
+		t.Error("ghost appeared with no recent hit")
+	}
+
+	ctx.T = time.Second + 10*time.Millisecond
+	d.chromatic(ctx)
+	if got := s.At(18, 10); got.R != 'H' || got.Fg != Palettes["glitch"].Err {
+		t.Errorf("left ghost = %q %x, want a red H", got.R, uint32(got.Fg))
+	}
+	if got := s.At(25, 10); got.R != 'X' || got.Fg != Palettes["glitch"].Accent2 {
+		t.Errorf("right ghost = %q %x, want a cyan X", got.R, uint32(got.Fg))
+	}
+	for i, r := range "HITX" {
+		if s.At(20+i, 10).R != r {
+			t.Errorf("original text changed at %d: %q", 20+i, s.At(20+i, 10).R)
+		}
+	}
+	if g := (&Glitch{hits: []time.Duration{0}}); g.Impact(0) < 0.99 || g.Impact(400*time.Millisecond) != 0 {
+		t.Error("impact should start at 1 and be gone after a quarter second")
+	}
+}
+
+func TestSungWordFlashes(t *testing.T) {
+	s := testScreen(40, 3)
+	line := lyric.Line{Time: 0, Text: "go now", Words: []lyric.Word{{Text: "go", Time: 0, Space: true}, {Text: "now", Time: time.Second}}}
+	DrawWordLine(s, 0, 0, line, time.Second+40*time.Millisecond, Palettes["verse"], term.ColorDefault, 40)
+	if s.At(3, 0).A&term.Reverse == 0 {
+		t.Error("a word should flash in reverse as it is sung")
+	}
+	s.Clear()
+	DrawWordLine(s, 0, 0, line, time.Second+400*time.Millisecond, Palettes["verse"], term.ColorDefault, 40)
+	if s.At(3, 0).A&term.Reverse != 0 {
+		t.Error("the flash should be over after a moment")
+	}
+}
+
+func TestSectionNameDecodesIntoPlace(t *testing.T) {
+	const name = "OBJECT CREATION"
+	if got := scramble(name, 0, 1); got == name || len([]rune(got)) != len([]rune(name)) || got[6] != ' ' {
+		t.Errorf("scramble at the start = %q", got)
+	}
+	if got := scramble(name, 2*time.Second, 1); got != name {
+		t.Errorf("scramble after settling = %q", got)
+	}
+	mid := scramble(name, 300*time.Millisecond, 1)
+	if !strings.HasPrefix(mid, "OBJ") || mid == name {
+		t.Errorf("scramble half way = %q, want the first letters settled", mid)
+	}
+}
+
+func TestVignetteDarkensTheEdgesButNotTheText(t *testing.T) {
+	s := testScreen(60, 20)
+	shadow := term.Hex(0x0b0d10)
+	bright := term.Hex(0xe0e0e0)
+	s.Set(30, 10, 'c', bright, term.ColorDefault, 0)
+	s.Set(0, 0, 'e', bright, term.ColorDefault, 0)
+	s.Set(59, 19, 'f', term.ColorDefault, term.ColorDefault, 0)
+	s.Set(1, 0, 'g', term.Hex(0x101214), term.ColorDefault, 0)
+	s.Vignette(shadow, 0.5)
+	if s.At(30, 10).Fg != bright {
+		t.Error("the centre should be untouched")
+	}
+	if s.At(0, 0).Fg == bright {
+		t.Error("the corner should be darkened")
+	}
+	if s.At(59, 19).Fg != term.ColorDefault {
+		t.Error("default-coloured text must be left alone")
+	}
+	if s.At(1, 0).Fg != term.Hex(0x101214) {
+		t.Error("text already close to the background must not fade further")
+	}
+}
+
+func TestASCIICharsetWritesOnlyASCII(t *testing.T) {
+	track := loadTrack(t)
+	var buf bytes.Buffer
+	screen := term.NewScreen(110, 32, term.ColorTrue, bufio.NewWriterSize(&buf, 1<<16))
+	screen.SetASCII(true)
+	d := NewDirector(track, total, Options{Seed: 3})
+	rng := NewFrameRand()
+	ctx := Context{
+		Screen: screen, Lyrics: track, Total: total, Seed: 3, FPS: 60, Rand: rng.Rand,
+		Bands: make([]float32, audio.BandCount), Wave: make([]float32, audio.WavePoints),
+		Volume: 80, ShowInfo: true, HintAlpha: 1,
+		Header: Rect{0, 0, 110, 3}, Area: Rect{0, 3, 110, 27}, Transport: Rect{0, 30, 110, 2},
+	}
+	for at := time.Duration(0); at < total; at += 1300 * time.Millisecond {
+		ctx.T, ctx.DT = at, 16*time.Millisecond
+		rng.Reseed(3, at, RandomHold)
+		d.Draw(&ctx)
+		screen.Flush()
+		for _, b := range buf.Bytes() {
+			if b >= 0x80 {
+				t.Fatalf("non-ASCII byte %#x at %v", b, at)
+			}
+		}
+		buf.Reset()
+	}
+}
+
+func TestASCIIArtFillsItsMaskWithStreamingCode(t *testing.T) {
+	pal := Palettes["verse"]
+	box := Rect{0, 0, 60, 20}
+	draw := func(at float64) (*term.Screen, Rect) {
+		s := testScreen(60, 20)
+		ctx := &Context{Screen: s, Palette: pal, Seed: 1}
+		art := tomatoArt(pal, 30, 20, 14, at)
+		return s, art.draw(ctx, box, at)
+	}
+	s, bbox := draw(1)
+	if bbox.W < 20 || bbox.H < 8 {
+		t.Fatalf("tomato box is only %dx%d cells", bbox.W, bbox.H)
+	}
+	filled, ascii := 0, true
+	for y := range 20 {
+		for x := range 60 {
+			if r := s.At(x, y).R; r != ' ' {
+				filled++
+				if r > 0x7f {
+					ascii = false
+				}
+			}
+		}
+	}
+	if filled < 250 {
+		t.Errorf("tomato filled only %d cells", filled)
+	}
+	if !ascii {
+		t.Error("ASCII art must be made of ASCII glyphs")
+	}
+	inside := func(x, y int) bool { return s.At(x, y).R != ' ' }
+	if inside(0, 0) || inside(59, 19) {
+		t.Error("the corners are outside the shape and must stay empty")
+	}
+	a, _ := draw(1)
+	b, _ := draw(1.4)
+	if gridText(a) == gridText(b) {
+		t.Error("the streams inside the shape should move")
+	}
+	c, _ := draw(1)
+	if gridText(a) != gridText(c) {
+		t.Error("the art must be deterministic")
+	}
+}
+
+func TestEveryArtObjectDrawsInsideItsBox(t *testing.T) {
+	pal := Palettes["verse"]
+	box := Rect{10, 3, 60, 22}
+	cx, cy, R := 30.0, 22.0, 13.0
+	arts := map[string]asciiArt{
+		"tomato":   tomatoArt(pal, cx, cy, R, 1),
+		"eggplant": eggplantArt(pal, cx, cy, R, 1),
+		"cat":      catArt(pal, cx, cy, R, 1),
+		"sun":      sunArt(pal, cx, cy, R, 1, 0.5),
+		"heart":    heartArt(pal, cx, cy, R, pal.Accent),
+		"globe":    globeArt(pal, cx, cy, R, 1),
+		"shield":   shieldArt(pal, cx, cy, R),
+		"warning":  warningArt(pal, cx, cy, R),
+		"cage":     cageArt(pal, cx, cy, R, 1),
+		"box":      boxArt(pal, cx, cy, R*1.5, R*0.8, 5),
+	}
+	for name, art := range arts {
+		s := testScreen(80, 28)
+		ctx := &Context{Screen: s, Palette: pal, Seed: 1}
+		bbox := art.draw(ctx, box, 1)
+		painted := 0
+		for y := range 28 {
+			for x := range 80 {
+				inside := x >= box.X && x < box.Right() && y >= box.Y && y < box.Bottom()
+				if s.At(x, y).R == ' ' {
+					continue
+				}
+				painted++
+				if !inside {
+					t.Fatalf("%s painted outside its box at %d,%d", name, x, y)
+				}
+				if s.At(x, y).R > 0x7f {
+					t.Fatalf("%s used non-ASCII glyph %q", name, s.At(x, y).R)
+				}
+			}
+		}
+		if painted < 40 {
+			t.Errorf("%s painted only %d cells", name, painted)
+		}
+		if bbox.W < 1 || bbox.H < 1 {
+			t.Errorf("%s reported an empty box", name)
+		}
+	}
+}
+
+func TestHUDFramesTheTarget(t *testing.T) {
+	s := testScreen(100, 28)
+	ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1}
+	r := Rect{0, 2, 100, 24}
+	box := Rect{35, 8, 30, 12}
+	drawHUD(ctx, r, box, "TARGET LOCK :: TEST", []hudRow{{"CLASS", "TEST"}, {"CONF", "0.99"}}, 0.5, 1)
+	text := gridText(s)
+	for _, want := range []string{"[ TARGET LOCK :: TEST ]", "CLASS", "TEST", "0.99", "[########........]  50%", "+----"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("HUD lacks %q", want)
+		}
+	}
+	if !strings.Contains(text, "0x") && !strings.ContainsAny(text, "ABCDEF") {
+		t.Error("HUD should scroll a hex dump")
+	}
+}
+
+func TestArtSceneFramesUseTheHUD(t *testing.T) {
+	track := loadTrack(t)
+	for name, at := range map[string]string{
+		"tomato": "1:19.50", "cat": "1:23.00", "globe": "0:15.50", "shield": "0:04.60",
+		"memory": "0:08.00", "warning": "2:13.00", "love": "3:00.50", "network": "1:03.50",
+	} {
+		frame := renderGrid(t, nil, track, 120, 36, stamp(at))
+		if !strings.Contains(frame, "[ ") || !strings.Contains(frame, "+----") {
+			t.Errorf("%s at %s lacks the HUD brackets and title", name, at)
+		}
+	}
+}

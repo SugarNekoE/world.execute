@@ -36,6 +36,7 @@ type Director struct {
 	palettes  map[string]Palette
 	total     time.Duration
 	snapshot  []term.Cell
+	chroma    []term.Cell
 }
 
 const transitionLength = 300 * time.Millisecond
@@ -180,6 +181,7 @@ func (d *Director) wipe(ctx *Context, k float64) {
 // fade and the transport.
 func (d *Director) paint(ctx *Context, sec section) {
 	ctx.Section = sec.Name
+	ctx.SectionAge = max(ctx.T-sec.Start, 0)
 	ctx.Palette = d.palette(sec)
 
 	ctx.SideW = 0
@@ -212,6 +214,43 @@ func (d *Director) paint(ctx *Context, sec section) {
 	}
 	if !d.banner.Active(ctx.T) {
 		d.glitch.Draw(ctx, ctx.Area, d.glitch.Amount(ctx, sec.Glitch))
+	}
+	d.chromatic(ctx)
+	ctx.Screen.Vignette(ctx.Palette.Shadow, 0.42)
+}
+
+// chromatic splits the picture into a red and a cyan ghost for a moment after
+// a big hit, like a lens failing under the shock. Ghosts only land on blank
+// cells, so nothing is overwritten.
+func (d *Director) chromatic(ctx *Context) {
+	k := d.glitch.Impact(ctx.T)
+	if k < 0.3 {
+		return
+	}
+	s := ctx.Screen
+	d.chroma = s.Snapshot(d.chroma)
+	shift := 1
+	if k > 0.7 {
+		shift = 2
+	}
+	pal := ctx.Palette
+	blank := func(x, y int) bool {
+		c := s.At(x, y)
+		return c.R == ' ' && c.Bg == term.ColorDefault
+	}
+	for y := ctx.Area.Y; y < ctx.Area.Bottom(); y++ {
+		for x := range s.W {
+			c := d.chroma[y*s.W+x]
+			if c.R == 0 || c.R == ' ' || (c.R >= 0x2800 && c.R <= 0x28ff) || term.RuneWidth(c.R) != 1 {
+				continue
+			}
+			if blank(x-shift, y) {
+				s.Set(x-shift, y, c.R, pal.Err, term.ColorDefault, term.Attr(0))
+			}
+			if blank(x+shift, y) {
+				s.Set(x+shift, y, c.R, pal.Accent2, term.ColorDefault, term.Attr(0))
+			}
+		}
 	}
 }
 
