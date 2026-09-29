@@ -39,6 +39,11 @@ make build               # ./bin/world.execute
 ./bin/world.execute --help
 ```
 
+The binary carries the track and its lyrics, so `bin/world.execute` runs from
+any directory on its own. An `assets/` directory found next to the working
+directory or the binary wins, which is how you swap the track; otherwise the
+embedded copies are written once to your cache directory and played from there.
+
 Then:
 
 ```sh
@@ -96,6 +101,7 @@ after five seconds; press any key to bring them back.
 | `space`, `p` | pause or resume |
 | `→`, `l` / `←`, `h` | seek 5 s forward / back |
 | `.` / `,` | seek 1 s forward / back |
+| `1`–`9` | jump to a chapter (boot, title, object creation, stimulations, switch gender, abandonment, illegal arguments, execution, love) |
 | `0`, `r` | restart |
 | `End` | jump to the last second |
 | `↑`, `+` / `↓`, `-` | volume up / down |
@@ -194,5 +200,8 @@ The storyboard, the exact timings and the design decisions are in
 ## Assets and licensing
 
 The lyrics and the recording belong to Mili and their label and are included
-here only so the program can play the song it was written for. No licence is
-granted for the audio or the lyrics; the Go code is a separate work.
+here, and embedded in the binary, only so the program can play the song it was
+written for. No licence is granted for the audio or the lyrics.
+
+The Go code is a separate work, licensed under the GNU General Public License,
+version 3 only. See `LICENSE`.

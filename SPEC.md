@@ -133,6 +133,7 @@ space pause   ← → seek   ↑ ↓ volume   m mute   r restart   ? help   q qu
 | `→`, `l` | seek forward 5 s |
 | `←`, `h` | seek back 5 s |
 | `.`, `,` | seek forward / back 1 s |
+| `1`–`9` | jump to a chapter, each the start of a storyboard section |
 | `0`, `Home` | restart from the beginning |
 | `End` | jump to the last second |
 | `↑`, `+` | volume up 5 |
@@ -319,6 +320,25 @@ what the lyric file leaves unsung.
 
 The monitor is dropped below 22 rows and stays clear of the telemetry strip;
 the verse readout is dropped below 64 columns.
+
+## 13f. Chapters and single-file use
+
+Both ideas come from the ASCII player at `yym8224961/world.execute-me-ascii`,
+a pre-rendered macOS player that ships as one file with chapter keys. This
+project keeps its live, lyric-driven picture and adopts the two conveniences.
+
+- Keys `1`–`9` seek to nine chapters (`scene.Chapters`): boot, the title,
+  object creation, stimulations, switch gender, abandonment, illegal arguments,
+  execution and love. `End` still reaches the finale. The progress bar marks
+  every chapter start with `┃`, on both sides of the handle.
+- The track and lyrics are embedded with `go:embed`. A file on disk, found in
+  the working directory or beside the binary, always wins; the embedded copy is
+  only the fallback for the default paths, and is written once to the user cache
+  directory (named after its content) because mpv and ffmpeg need real files. A
+  custom `--audio` or `--lyrics` that does not exist is still an error.
+- The progress bar's song-map ticks compared an absolute screen column with a
+  position along the bar, which shifted them by about a tenth of the song. They
+  now use the bar cell.
 
 ## 13e. Animation timing
 
