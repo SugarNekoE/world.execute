@@ -36,6 +36,7 @@ type Screen struct {
 	curY     int
 	scratch  []byte
 	begun    bool
+	ascii    bool
 	writeErr error
 }
 
@@ -268,7 +269,11 @@ func (s *Screen) put(x, y int, c Cell) {
 		s.out.Write(s.scratch)
 		s.cur = st
 	}
-	s.out.WriteRune(c.R)
+	r := c.R
+	if s.ascii {
+		r = ASCII(r)
+	}
+	s.out.WriteRune(r)
 	w := runeWidth(c.R)
 	s.curX, s.curY = x+1+w, y+1
 	s.haveCur = true
@@ -351,6 +356,43 @@ func (s *Screen) Scale(snapshot []Cell, v, h float64) {
 		}
 		s.repairRow(y)
 	}
+}
+
+// Vignette darkens coloured cells towards bg as they get further from the
+// centre, by at most strength, never below a minimum distance from bg. Cells that use the terminal's default colours
+// are left alone, so body text keeps its own contrast.
+func (s *Screen) Vignette(bg Color, strength float64) {
+	if strength <= 0 || s.W < 4 || s.H < 4 {
+		return
+	}
+	cx, cy := float64(s.W-1)/2, float64(s.H-1)/2
+	for y := range s.H {
+		ny := (float64(y) - cy) / cy
+		for x := range s.W {
+			nx := (float64(x) - cx) / cx
+			r := math.Sqrt(nx*nx+ny*ny) / math.Sqrt2
+			if r <= 0.6 {
+				continue
+			}
+			t := math.Min((r-0.6)/0.5, 1)
+			k := strength * t * t * (3 - 2*t)
+			c := &s.cells[y*s.W+x]
+			if c.R == 0 || c.R == ' ' || c.Fg == ColorDefault {
+				continue
+			}
+			if faded := Mix(c.Fg, bg, k); bg == ColorDefault || channelGap(faded, bg) >= minVignetteGap {
+				c.Fg = faded
+			}
+		}
+	}
+}
+
+// minVignetteGap is the least distance, summed over the colour channels, a
+// vignetted cell may keep from the background, so faint text never vanishes.
+const minVignetteGap = 150
+
+func channelGap(a, b Color) int {
+	return abs(int(a.r())-int(b.r())) + abs(int(a.g())-int(b.g())) + abs(int(a.b())-int(b.b()))
 }
 
 // SetAttr merges attribute bits into every cell of a row within [x0, x1).

@@ -366,3 +366,69 @@ func TestScaleCollapsesTowardsTheCentre(t *testing.T) {
 	}
 	s.Scale(snap[:3], 0.5, 0.5)
 }
+
+func TestASCIIStandIns(t *testing.T) {
+	cases := map[rune]rune{
+		'a': 'a', '─': '-', '━': '=', '│': '|', '┌': '+', '█': '#', '░': '.', '▁': '_', '▶': '>',
+		'✦': '*', '♥': '3', '⏸': '|', '⋅': '.', '→': '>', '⠀': ' ',
+	}
+	for in, want := range cases {
+		if got := ASCII(in); got != want {
+			t.Errorf("ASCII(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := ASCII('世'); got != '世' {
+		t.Errorf("wide glyphs must survive, got %q", got)
+	}
+	if got := ASCII('☃'); got != '?' {
+		t.Errorf("unknown narrow glyph = %q, want ?", got)
+	}
+}
+
+func TestBrailleBecomesStrokes(t *testing.T) {
+	braille := func(dots ...int) rune {
+		var bits rune
+		for _, d := range dots {
+			bits |= 1 << d
+		}
+		return 0x2800 + bits
+	}
+	cases := []struct {
+		name string
+		r    rune
+		want rune
+	}{
+		{"vertical", braille(0, 1, 2, 6), '|'},
+		{"horizontal middle", braille(1, 4), '-'},
+		{"horizontal bottom", braille(6, 7), '_'},
+		{"horizontal top", braille(0, 3), '"'},
+		{"falling diagonal", braille(0, 4), '\\'},
+		{"rising diagonal", braille(1, 3), '/'},
+		{"speck low", braille(2), '.'},
+		{"speck high", braille(0), '\''},
+		{"full", braille(0, 1, 2, 3, 4, 5, 6, 7), '#'},
+	}
+	for _, tc := range cases {
+		if got := ASCII(tc.r); got != tc.want {
+			t.Errorf("%s: ASCII(%U) = %q, want %q", tc.name, tc.r, got, tc.want)
+		}
+	}
+}
+
+func TestScreenWritesASCIIWhenAsked(t *testing.T) {
+	s, buf := newTestScreen(8, 1)
+	s.SetASCII(true)
+	s.Text(0, 0, "─█▶⣿ok", ColorDefault, ColorDefault, 0)
+	s.Flush()
+	for _, b := range buf.Bytes() {
+		if b >= 0x80 {
+			t.Fatalf("non-ASCII byte %#x in %q", b, buf.String())
+		}
+	}
+	if !strings.Contains(buf.String(), "-#>#ok") {
+		t.Errorf("output %q lacks the stand-ins", buf.String())
+	}
+	if s.At(0, 0).R != '─' {
+		t.Error("the buffer must keep the original glyph")
+	}
+}
