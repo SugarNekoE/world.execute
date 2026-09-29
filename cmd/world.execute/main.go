@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -50,6 +51,20 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 	if err := cfg.Resolve(); err != nil {
 		fmt.Fprintln(stderr, "world.execute:", err)
 		return 1
+	}
+	if cfg.Calibrate {
+		dir, err := os.MkdirTemp("", "world-execute-calibrate-")
+		if err != nil {
+			fmt.Fprintln(stderr, "world.execute:", err)
+			return 1
+		}
+		defer os.RemoveAll(dir)
+		cfg.AudioPath = filepath.Join(dir, "click.wav")
+		if err := audio.WriteClickTrack(cfg.AudioPath, 4*time.Minute, scene.CalibrationPeriod); err != nil {
+			fmt.Fprintln(stderr, "world.execute:", err)
+			return 1
+		}
+		cfg.LyricsPath, cfg.NoAnalysis, cfg.Start = "", true, 0
 	}
 	track, err := loadTrack(cfg.LyricsPath, cfg.Lang)
 	if err != nil {
@@ -98,7 +113,10 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 		seed = time.Now().UnixNano()
 	}
 
-	dir := scene.NewDirector(track, total, scene.Options{Seed: seed, Theme: cfg.Theme})
+	var dir frameDrawer = scene.NewDirector(track, total, scene.Options{Seed: seed, Theme: cfg.Theme})
+	if cfg.Calibrate {
+		dir = scene.NewCalibration(cfg.Theme)
+	}
 	ctrl := control.New()
 	ctx := scene.Context{
 		Screen:   screen,
@@ -122,7 +140,10 @@ func run(args []string, stdin, stdout, stderr *os.File) int {
 }
 
 // loop drives the animation, either in real time or as a fast frame dump.
-func loop(cfg *config.Config, t *term.Terminal, screen *term.Screen, dir *scene.Director,
+// frameDrawer paints one frame of whatever is playing.
+type frameDrawer interface{ Draw(*scene.Context) }
+
+func loop(cfg *config.Config, t *term.Terminal, screen *term.Screen, dir frameDrawer,
 	ctrl *control.Controller, ctx *scene.Context, player *audio.Player, total time.Duration, stderr *os.File) int {
 
 	frameDur := time.Second / time.Duration(cfg.FPS)
