@@ -3,6 +3,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"world.execute/assets"
 )
 
 // Config is the resolved run configuration.
@@ -38,8 +42,8 @@ type Config struct {
 // Default returns the configuration used when no flags are given.
 func Default() *Config {
 	return &Config{
-		AudioPath:  filepath.Join("assets", "world-execute-me.mp3"),
-		LyricsPath: filepath.Join("assets", "lyrics.lrc"),
+		AudioPath:  defaultAudio,
+		LyricsPath: defaultLyrics,
 		Player:     "auto",
 		Lang:       "en",
 		Color:      "auto",
@@ -128,18 +132,71 @@ func (c *Config) Validate() error {
 // directory first and then next to the executable.
 func (c *Config) Resolve() error {
 	audio, err := locate(c.AudioPath)
+	if errors.Is(err, os.ErrNotExist) && c.AudioPath == defaultAudio {
+		audio, err = extractEmbedded(filepath.Base(defaultAudio))
+	}
 	if err != nil {
 		return err
 	}
 	c.AudioPath = audio
 	if c.LyricsPath != "" {
-		if lyr, err := locate(c.LyricsPath); err == nil {
+		lyr, err := locate(c.LyricsPath)
+		if errors.Is(err, os.ErrNotExist) && c.LyricsPath == defaultLyrics {
+			lyr, err = extractEmbedded(filepath.Base(defaultLyrics))
+		}
+		if err == nil {
 			c.LyricsPath = lyr
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
 	return nil
+}
+
+var (
+	defaultAudio  = filepath.Join("assets", "world-execute-me.mp3")
+	defaultLyrics = filepath.Join("assets", "lyrics.lrc")
+)
+
+// extractEmbedded writes an embedded asset into the user cache directory, once,
+// and returns its path. The directory is named after the content, so a new
+// build with a different track never reuses a stale copy.
+func extractEmbedded(name string) (string, error) {
+	data, err := assets.Files.ReadFile(name)
+	if err != nil {
+		return "", fmt.Errorf("asset %s: %w", name, os.ErrNotExist)
+	}
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	sum := sha256.Sum256(data)
+	dir := filepath.Join(base, "world.execute", hex.EncodeToString(sum[:6]))
+	path := filepath.Join(dir, name)
+	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(data)) {
+		return path, nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(dir, name+".*")
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		os.Remove(tmp.Name())
+		return "", err
+	}
+	return path, nil
 }
 
 func locate(path string) (string, error) {
