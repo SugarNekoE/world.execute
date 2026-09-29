@@ -24,6 +24,7 @@ type Config struct {
 	Lang       string
 	Color      string
 	Theme      string
+	Charset    string
 	Record     string
 	Start      time.Duration
 	Duration   time.Duration
@@ -48,6 +49,7 @@ func Default() *Config {
 		Lang:       "en",
 		Color:      "auto",
 		Theme:      "dark",
+		Charset:    "ascii",
 		Volume:     80,
 		FPS:        60,
 	}
@@ -61,6 +63,7 @@ func (c *Config) Register(fs *flag.FlagSet) {
 	fs.StringVar(&c.Lang, "lang", c.Lang, "lyrics to show: en, zh, both")
 	fs.StringVar(&c.Color, "color", c.Color, "color mode: auto, truecolor, 256, 16, none")
 	fs.StringVar(&c.Theme, "theme", c.Theme, "color theme: dark or light")
+	fs.StringVar(&c.Charset, "charset", c.Charset, "glyphs: ascii for plain terminal art, unicode for blocks and braille")
 	fs.StringVar(&c.Record, "record", "", "write frames to a file instead of the terminal")
 	fs.IntVar(&c.FPS, "fps", c.FPS, "animation frames per second")
 	fs.IntVar(&c.Volume, "volume", c.Volume, "initial volume, 0 to 130")
@@ -107,6 +110,11 @@ func (c *Config) Validate() error {
 	case "auto", "mpv", "ffplay", "silent", "none":
 	default:
 		return fmt.Errorf("player must be auto, mpv, ffplay or silent, got %q", c.Player)
+	}
+	switch c.Charset {
+	case "ascii", "unicode":
+	default:
+		return fmt.Errorf("charset must be ascii or unicode, got %q", c.Charset)
 	}
 	switch c.Theme {
 	case "dark", "light":
