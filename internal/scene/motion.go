@@ -45,30 +45,12 @@ func drawCurrent(ctx *Context, r Rect, regs []regEntry) {
 	motionLabel(ctx, r, mode)
 	r.Y++
 	r.H--
-	c := motionCanvas(ctx, r)
-	t := ctx.Since(regs[0].at).Seconds()
-	cy := 0.25 + 0.08*(1-k)
-	c.Polyline([]Point{{0.12, 0.33}, {0.12, 0.08}, {0.43, 0.08}}, 0)
-	c.Polyline([]Point{{0.59, 0.08}, {0.9, 0.08}, {0.9, 0.45}, {0.12, 0.45}, {0.12, 0.33}}, 0)
-	c.Circle(0.12, 0.25, 0.07, 1.6, 1)
-	c.Line(0.06, 0.25, 0.18, 0.25, 1)
-	c.Circle(0.43, 0.08, 0.012, 1.8, 2)
-	c.Circle(0.59, 0.08, 0.012, 1.8, 2)
-	c.Line(0.43, 0.08, 0.59, 0.08+0.19*(1-k), 2)
-	c.Circle(0.9, 0.26, 0.045, 2.0, 2)
-	c.Line(0.87, 0.20, 0.93, 0.32, 2)
-	c.Line(0.87, 0.32, 0.93, 0.20, 2)
-	flow := (1-k)*0.08*math.Sin(t*7) + k*t*0.24
-	for i := range 20 {
-		u := math.Mod(float64(i)/20+flow+10, 1)
-		x, y := circuitPoint(u)
-		c.Disc(x, y, 0.009, 1.6, 1+i%2)
+	if r.W >= 96 && r.H >= 17 {
+		drawCircuitRich(ctx, r, regs)
+	} else {
+		drawCircuit(ctx, r, regs)
 	}
-	c.Line(0.03, 0.76, 0.97, 0.76, 0)
-	c.Func(func(x float64) float64 {
-		wave := 0.76 - 0.18*math.Sin(x*math.Pi*6-t*7)
-		return (1-k)*wave + k*0.59
-	}, 1, r.W*4)
+	c := motionCanvas(ctx, r)
 	if ctx.T >= regs[2].at && ctx.T < regs[3].at {
 		shutter := Progress(ctx.T, regs[2].at, regs[2].at+time.Second)
 		for i := range 12 {
@@ -78,6 +60,7 @@ func drawCurrent(ctx *Context, r Rect, regs []regEntry) {
 		}
 	}
 	if ctx.T >= regs[3].at {
+		cy := 0.25 + 0.08*(1-k)
 		for i := range 4 {
 			a := ctx.Since(regs[3].at).Seconds()*4 + float64(i)*math.Pi/2
 			c.Arc(0.5, cy, 0.22, 0.65, a, a+0.9, 3)
@@ -141,6 +124,32 @@ func drawTravel(ctx *Context, r Rect, regs []regEntry) {
 }
 
 func drawIdentity(ctx *Context, r Rect, regs []regEntry) {
+	if r.W < 60 || r.H < 14 {
+		drawIdentityCompact(ctx, r, regs)
+		return
+	}
+	active := regs[0]
+	for _, reg := range regs {
+		if ctx.T >= reg.at {
+			active = reg
+		}
+	}
+	motionLabel(ctx, r, active.label+"   [ "+active.from+" ]  ->  [ "+active.to+" ]")
+	r.Y++
+	r.H--
+	switch active.label {
+	case "clock":
+		drawClockRich(ctx, r, active)
+	case "gender":
+		drawGenderRich(ctx, r, active)
+	case "role":
+		drawRoleRich(ctx, r, active)
+	default:
+		drawTranceRich(ctx, r, active)
+	}
+}
+
+func drawIdentityCompact(ctx *Context, r Rect, regs []regEntry) {
 	active := regs[0]
 	for _, reg := range regs {
 		if ctx.T >= reg.at {

@@ -142,14 +142,24 @@ func (s *ShapeScene) drawReadout(ctx *Context, box Rect, cur shapeSpec) {
 
 func (s *ShapeScene) drawShape(ctx *Context, box Rect, cur shapeSpec) {
 	pal := ctx.Palette
-	c := NewCanvas(ctx.Screen, box, pal.Dim, pal.Accent, pal.Accent2, pal.Kind)
-	defer c.Flush()
-
 	energy := float64(ctx.Energy)
 	if ctx.Analysis == nil {
 		energy = 0.4 + 0.3*Pulse(ctx.Sec(ctx.T), 1.2)
 	}
 	energy = min(max(energy, 0), 1)
+	switch cur.kind {
+	case "circle":
+		drawCircleRich(ctx, box, energy, Progress(ctx.T, cur.at, cur.kwAt))
+		return
+	case "sine":
+		drawSineRich(ctx, box, energy)
+		return
+	case "limit":
+		drawLimitRich(ctx, box, Progress(ctx.T, cur.at, cur.kwAt))
+		return
+	}
+	c := NewCanvas(ctx.Screen, box, pal.Dim, pal.Accent, pal.Accent2, pal.Kind)
+	defer c.Flush()
 
 	// A baseline makes the plot read as an instrument panel.
 	c.Line(0, 0.5, 1, 0.5, 0)
@@ -157,12 +167,6 @@ func (s *ShapeScene) drawShape(ctx *Context, box Rect, cur shapeSpec) {
 	switch cur.kind {
 	case "points":
 		s.drawPoints(ctx, c, energy)
-	case "circle":
-		s.drawCircle(ctx, c, energy, Progress(ctx.T, cur.at, cur.kwAt))
-	case "sine":
-		s.drawSine(ctx, c, energy)
-	case "limit":
-		s.drawLimit(ctx, c, Progress(ctx.T, cur.at, cur.kwAt))
 	default:
 		c.Circle(0.5, 0.5, 0.3, Aspect, 1)
 	}
@@ -188,71 +192,6 @@ func (s *ShapeScene) drawPoints(ctx *Context, c *Canvas, energy float64) {
 	c.Points(pts, 1)
 	// The line that becomes the circle, drawn through the outermost points.
 	c.Circle(0.5, 0.5, radius, Aspect, 2)
-}
-
-// drawCircle traces its own circumference as the line is sung.
-func (s *ShapeScene) drawCircle(ctx *Context, c *Canvas, energy, progress float64) {
-	radius := 0.3 + 0.08*energy
-	c.Circle(0.5, 0.5, radius, Aspect, 2)
-	c.Circle(0.5, 0.5, radius*0.999, Aspect, 2)
-	end := progress * 2 * math.Pi
-	c.Arc(0.5, 0.5, radius, Aspect, -math.Pi/2, -math.Pi/2+end, 1)
-
-	// The radius sweeps round with the trace.
-	ca := -math.Pi/2 + end
-	tipX := 0.5 + radius*math.Cos(ca)
-	tipY := 0.5 + radius*Aspect*math.Sin(ca)
-	c.Line(0.5, 0.5, tipX, tipY, 1)
-	c.Set(0.5, 0.5, 3)
-	c.Set(tipX, tipY, 3)
-}
-
-// drawSine is a travelling wave whose frequency follows the music.
-func (s *ShapeScene) drawSine(ctx *Context, c *Canvas, energy float64) {
-	bands := ctx.Analysis.BandsAt(ctx.T, ctx.Bands)
-	treble := 0.0
-	if len(bands) > 0 {
-		for _, b := range bands[len(bands)/2:] {
-			treble += float64(b)
-		}
-		treble /= float64(len(bands) - len(bands)/2)
-	}
-	freq := 1.6 + 3.4*treble + 1.5*energy
-	phase := ctx.Sec(ctx.T) * 1.4
-	amp := 0.22 + 0.22*energy
-	c.Func(func(x float64) float64 {
-		return 0.5 - amp*math.Sin(2*math.Pi*(freq*x+phase))
-	}, 1, 420)
-	// Tangents at the crests, ready for the next line.
-	for i := -2; i <= 2; i++ {
-		x := (float64(i)*0.25 + math.Mod(phase, 1)) / 1
-		if x < 0 || x > 1 {
-			continue
-		}
-		y := 0.5 - amp*math.Sin(2*math.Pi*(freq*x+phase))
-		c.Line(x, y, x, min(y+0.18, 1), 2)
-	}
-	c.Line(0.5, 0, 0.5, 1, 0)
-}
-
-// drawLimit shows a curve that approaches a wall it never reaches.
-func (s *ShapeScene) drawLimit(ctx *Context, c *Canvas, progress float64) {
-	reach := 0.15 + 0.8*progress
-	c.Func(func(x float64) float64 {
-		if x > reach {
-			return 1.4
-		}
-		return 0.98 - 0.85/(1+12*x)
-	}, 1, 420)
-	wall := 0.98
-	for y := 0.0; y < 1; y += 0.06 {
-		c.Line(wall, y, wall, y+0.03, 2)
-	}
-	// The gap that shrinks as the section goes on.
-	gap := max(0.02, 0.35-0.3*progress)
-	x := reach
-	y := 0.98 - 0.85/(1+12*x)
-	c.Line(max(x-gap, 0), y, min(x+gap, 1), y, 3)
 }
 
 // HeartPath returns a parametric heart scaled into 0..1 around cx, cy.
