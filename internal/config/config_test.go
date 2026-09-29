@@ -95,3 +95,14 @@ func TestOnDiskAssetsWinAndCustomPathsAreNotReplaced(t *testing.T) {
 		t.Error("a missing custom audio path should be an error, not the embedded track")
 	}
 }
+
+func TestCalibrateFlag(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg, err := Load([]string{"-calibrate"})
+	if err != nil || !cfg.Calibrate {
+		t.Fatalf("calibrate = %v, %v", cfg != nil && cfg.Calibrate, err)
+	}
+	if cfg, _ := Load(nil); cfg.Calibrate {
+		t.Error("calibration must be off by default")
+	}
+}

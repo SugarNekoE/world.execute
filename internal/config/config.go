@@ -36,6 +36,7 @@ type Config struct {
 	Height     int
 	Frames     int
 	NoAnalysis bool
+	Calibrate  bool
 	Quiet      bool
 	Verbose    bool
 }
@@ -75,6 +76,7 @@ func (c *Config) Register(fs *flag.FlagSet) {
 	fs.DurationVar(&c.Delay, "delay", 0, "shift the animation against the audio: positive shows it earlier, negative later (adjust live with [ and ])")
 	fs.Int64Var(&c.Seed, "seed", 0, "seed for the code rain, 0 picks one from the clock")
 	fs.BoolVar(&c.NoAnalysis, "no-analysis", false, "skip the ffmpeg spectrum analysis")
+	fs.BoolVar(&c.Calibrate, "calibrate", false, "play a click track and a test card to tune the sync with [ and ]")
 	fs.BoolVar(&c.Quiet, "quiet", false, "suppress the startup log")
 	fs.BoolVar(&c.Verbose, "verbose", false, "let the audio player log to stderr")
 }
