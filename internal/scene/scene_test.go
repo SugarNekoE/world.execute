@@ -800,3 +800,40 @@ func TestWallRisesFasterThanItFalls(t *testing.T) {
 		t.Error("no time should mean no movement")
 	}
 }
+
+func TestChaptersStartOnSections(t *testing.T) {
+	if len(Chapters) != 9 {
+		t.Fatalf("%d chapters, want the nine number keys", len(Chapters))
+	}
+	starts := map[time.Duration]bool{}
+	for _, s := range sections {
+		starts[s.Start] = true
+	}
+	var last time.Duration = -1
+	for _, c := range Chapters {
+		if c.At <= last {
+			t.Errorf("chapter %q at %v is not after the previous one", c.Name, c.At)
+		}
+		last = c.At
+		if !starts[c.At] {
+			t.Errorf("chapter %q at %v does not start a section", c.Name, c.At)
+		}
+	}
+}
+
+func TestBarMarksTheChapters(t *testing.T) {
+	track := loadTrack(t)
+	frame := renderGrid(t, nil, track, 120, 32, stamp("1:00.00"))
+	bar := ""
+	for _, row := range strings.Split(frame, "\n") {
+		if strings.ContainsAny(row, "▶⏸") {
+			bar = row
+		}
+	}
+	if n := strings.Count(bar, "┃"); n < 6 {
+		t.Errorf("bar shows %d chapter marks, want most of the nine: %q", n, bar)
+	}
+	if !isChapterMark(int(float64(Chapters[2].At)/float64(total)*100), 100, total) {
+		t.Error("chapter three should be marked on a 100 cell bar")
+	}
+}

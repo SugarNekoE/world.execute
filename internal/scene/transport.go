@@ -16,6 +16,7 @@ var (
 	barTrack   = '─'
 	barHandle  = '●'
 	barTick    = '·'
+	barChapter = '┃'
 	pausedMark = '⏸'
 	playMark   = '▶'
 )
@@ -38,6 +39,7 @@ var helpRows = []hint{
 	{"← / h", "seek back 5s"},
 	{". / >", "seek forward 1s"},
 	{", / <", "seek back 1s"},
+	{"1 - 9", "jump to a chapter"},
 	{"0 / Home", "restart from the beginning"},
 	{"End", "jump to the last second"},
 	{"↑ / +", "volume up"},
@@ -134,17 +136,32 @@ func (t *Transport) drawBar(ctx *Context, r Rect) {
 		ch := barTrack
 		fg := dim
 		switch {
-		case i < fill:
-			ch, fg = barFilled, pal.Accent
 		case i == fill:
 			ch, fg = barHandle, pal.Accent2
-		case t.isLineTick(ctx, barX+i, barW, total):
+		case isChapterMark(i, barW, total):
+			ch, fg = barChapter, pal.Accent2
+		case i < fill:
+			ch, fg = barFilled, pal.Accent
+		case t.isLineTick(ctx, i, barW, total):
 			ch, fg = barTick, pal.Dim
 		}
 		s.Set(barX+i, y, ch, fg, term.ColorDefault, term.Attr(0))
 	}
 	s.Text(barEnd+1, y, totalLabel, pal.Dim, term.ColorDefault, term.Attr(0))
 	s.Text(rightX, y, right, pal.Dim, term.ColorDefault, term.Attr(0))
+}
+
+// isChapterMark reports whether a chapter starts under bar cell i.
+func isChapterMark(i, barW int, total time.Duration) bool {
+	if barW <= 0 || total <= 0 {
+		return false
+	}
+	for _, c := range Chapters {
+		if int(float64(c.At)/float64(total)*float64(barW)) == i {
+			return true
+		}
+	}
+	return false
 }
 
 // isLineTick reports whether the cell under the cursor is close to a lyric

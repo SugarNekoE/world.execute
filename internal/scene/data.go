@@ -191,3 +191,22 @@ var absurdObjects = []objectSpec{
 		icon: [IconHeight]string{" ++ ", "####", "####", " ++ "},
 	},
 }
+
+// Chapter is a named place in the song that a number key jumps to.
+type Chapter struct {
+	Name string
+	At   time.Duration
+}
+
+// Chapters are the nine jump targets, each the start of a storyboard section.
+var Chapters = []Chapter{
+	{"BOOT", stamp("0:00.00")},
+	{"WORLD.EXECUTE(ME);", stamp("0:19.11")},
+	{"OBJECT CREATION", stamp("0:29.88")},
+	{"STIMULATIONS", stamp("0:59.46")},
+	{"SWITCH GENDER", stamp("1:28.71")},
+	{"ABANDONMENT", stamp("1:50.94")},
+	{"ILLEGAL ARGUMENTS", stamp("2:05.67")},
+	{"EXECUTION", stamp("2:27.87")},
+	{"LO-O-OVE", stamp("2:57.36")},
+}
