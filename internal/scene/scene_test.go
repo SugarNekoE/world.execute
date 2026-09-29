@@ -1160,3 +1160,411 @@ func TestArtSceneFramesUseTheHUD(t *testing.T) {
 		}
 	}
 }
+
+func asciiBoxFrame(t *testing.T, w, h int, draw func(ctx *Context, box Rect)) (string, *term.Screen) {
+	t.Helper()
+	s := testScreen(w, h)
+	ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1, T: 40 * time.Second, Volume: 80}
+	draw(ctx, Rect{2, 2, w - 4, h - 4})
+	return gridText(s), s
+}
+
+func countGlyphs(s *term.Screen) (cells int, nonASCII int) {
+	for y := range s.H {
+		for x := range s.W {
+			if r := s.At(x, y).R; r != ' ' && r != 0 {
+				cells++
+				if term.ASCII(r) > 0x7f {
+					nonASCII++
+				}
+			}
+		}
+	}
+	return
+}
+
+func TestRichFiguresFillTheirBoxWithASCII(t *testing.T) {
+	figs := map[string]func(ctx *Context, box Rect){
+		"circle": func(ctx *Context, box Rect) { drawCircleRich(ctx, box, 0.5, 0.8) },
+		"sine":   func(ctx *Context, box Rect) { drawSineRich(ctx, box, 0.5) },
+		"limit":  func(ctx *Context, box Rect) { drawLimitRich(ctx, box, 0.8) },
+		"circuit": func(ctx *Context, box Rect) {
+			drawCircuit(ctx, box, []regEntry{{at: 30 * time.Second}, {at: 38 * time.Second}, {at: 60 * time.Second}, {at: 70 * time.Second}})
+		},
+		"heart": func(ctx *Context, box Rect) { drawFragmentsArt(ctx, box, 2) },
+		"judge": func(ctx *Context, box Rect) { drawJudgeArt(ctx, box, 2) },
+	}
+	for name, draw := range figs {
+		text, s := asciiBoxFrame(t, 110, 30, draw)
+		cells, bad := countGlyphs(s)
+		if cells < 150 {
+			t.Errorf("%s painted only %d cells", name, cells)
+		}
+		if bad != 0 {
+			t.Errorf("%s used %d non-ASCII glyphs", name, bad)
+		}
+		for y := range 30 {
+			for x := range 110 {
+				if (x < 2 || x >= 108 || y < 2 || y >= 28) && s.At(x, y).R != ' ' {
+					t.Fatalf("%s painted outside its box at %d,%d", name, x, y)
+				}
+			}
+		}
+		again, _ := asciiBoxFrame(t, 110, 30, draw)
+		if text != again {
+			t.Errorf("%s is not deterministic", name)
+		}
+	}
+	for name, draw := range figs {
+		tiny := testScreen(20, 6)
+		ctx := &Context{Screen: tiny, Palette: Palettes["verse"], Seed: 1}
+		if name != "heart" && name != "judge" && name != "circuit" {
+			draw(ctx, Rect{0, 0, 20, 6})
+			if c, _ := countGlyphs(tiny); c != 0 {
+				t.Errorf("%s should skip a tiny box", name)
+			}
+		}
+	}
+}
+
+func TestCircleMeasuresItsCircumferenceWithPi(t *testing.T) {
+	early, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawCircleRich(ctx, box, 0.5, 0.05) })
+	late, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawCircleRich(ctx, box, 0.5, 1) })
+	if strings.Count(late, "theta=360") != 1 || !strings.Contains(early, "theta=018") {
+		t.Error("the angle readout should follow the sweep")
+	}
+	countDigits := func(s string) int { return strings.Count(s, "3") + strings.Count(s, "1") + strings.Count(s, "4") }
+	if countDigits(late) <= countDigits(early) {
+		t.Error("the digits of pi should keep appearing as the circle is traced")
+	}
+}
+
+func TestSineTracksACursorAndTangents(t *testing.T) {
+	text, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawSineRich(ctx, box, 0.5) })
+	for _, want := range []string{"[ y=", "m=", "+1", "-1", "0pi", "4pi"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("sine plot lacks %q", want)
+		}
+	}
+}
+
+func TestLimitApproachesTheAsymptote(t *testing.T) {
+	early, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawLimitRich(ctx, box, 0.1) })
+	late, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawLimitRich(ctx, box, 1) })
+	if !strings.Contains(late, "never reached") || !strings.Contains(late, "f(10^4)") || strings.Contains(early, "f(10^4)") {
+		t.Error("the table of values should grow towards the limit")
+	}
+	if !strings.Contains(late, "eps=0.") || strings.Count(late, "1e") < 3 {
+		t.Error("the plot should show the epsilon band and the log axis")
+	}
+}
+
+func TestCircuitSwitchClosesAndTheCurrentSettles(t *testing.T) {
+	regs := []regEntry{{at: 30 * time.Second}, {at: 38 * time.Second}, {at: 60 * time.Second}, {at: 70 * time.Second}}
+	frame := func(at time.Duration) string {
+		s := testScreen(110, 30)
+		ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1, T: at}
+		drawCircuit(ctx, Rect{2, 2, 106, 26}, regs)
+		return gridText(s)
+	}
+	open, closed := frame(35*time.Second), frame(41*time.Second)
+	if !strings.Contains(open, "OPEN") || !strings.Contains(open, "(~)") || !strings.Contains(open, "f=50Hz") {
+		t.Error("before the switch the circuit should be open and alternating")
+	}
+	if !strings.Contains(closed, "CLOSED") || !strings.Contains(closed, "[=]") || !strings.Contains(closed, "f=0Hz") {
+		t.Error("after the switch the circuit should be closed and direct")
+	}
+}
+
+func TestHeartErodesAndJudgmentTilts(t *testing.T) {
+	pct := func(at time.Duration) string {
+		s := testScreen(110, 30)
+		ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1, T: at}
+		_, rows := drawFragmentsArt(ctx, Rect{2, 2, 106, 26}, at.Seconds())
+		return rows[0].value
+	}
+	if pct(stamp("1:58.50")) == pct(stamp("2:03.50")) {
+		t.Error("the erased share should grow")
+	}
+	if pct(stamp("2:04.98")) != "100%" && !strings.HasPrefix(pct(stamp("2:04.98")), "9") {
+		t.Errorf("the heart should be almost gone at the end, got %s", pct(stamp("2:04.98")))
+	}
+	verdicts := map[string]bool{}
+	for i := range 40 {
+		s := testScreen(110, 30)
+		ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1}
+		_, rows := drawJudgeArt(ctx, Rect{2, 2, 106, 26}, float64(i)*0.25)
+		verdicts[rows[2].value] = true
+	}
+	if len(verdicts) < 2 {
+		t.Error("the verdict should change")
+	}
+	text, _ := asciiBoxFrame(t, 110, 30, func(ctx *Context, box Rect) { drawJudgeArt(ctx, box, 1.2) })
+	for _, want := range []string{"YOUR GOD", "ILLEGAL ARGUMENTS", "[####]", "/^\\"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the scales lack %q", want)
+		}
+	}
+}
+
+func richBox(t *testing.T, w, h int, at time.Duration, draw func(ctx *Context, box Rect)) (string, *term.Screen) {
+	t.Helper()
+	s := testScreen(w, h)
+	ctx := &Context{Screen: s, Palette: Palettes["verse"], Seed: 1, T: at, Volume: 80}
+	draw(ctx, Rect{2, 2, w - 4, h - 4})
+	return gridText(s), s
+}
+
+func TestSchematicThrowsFromAlternatingToDirectCurrent(t *testing.T) {
+	regs := []regEntry{{at: 30 * time.Second}, {at: 38 * time.Second}, {at: 60 * time.Second}, {at: 70 * time.Second}}
+	frame := func(at time.Duration) (string, *term.Screen) {
+		return richBox(t, 120, 30, at, func(ctx *Context, box Rect) { drawCircuitRich(ctx, box, regs) })
+	}
+	ac, s := frame(35 * time.Second)
+	dc, _ := frame(41 * time.Second)
+	for _, want := range []string{"AC GEN 50Hz", "SPDT [AC]", "BRIDGE", "C 470uF", "LOAD", "12V", "PHASOR", "METERS", "SPECTRUM", "OSCILLOSCOPE", "VOUT", "sin="} {
+		if !strings.Contains(ac, want) {
+			t.Errorf("schematic before the switch lacks %q", want)
+		}
+	}
+	for _, want := range []string{"SPDT [DC]", "phase locked", "[######"} {
+		if !strings.Contains(dc, want) {
+			t.Errorf("schematic after the switch lacks %q", want)
+		}
+	}
+	if strings.Contains(ac, "phase locked") || strings.Contains(ac, "[#") {
+		t.Error("nothing should be locked or charged before the switch")
+	}
+	if _, bad := countGlyphs(s); bad != 0 {
+		t.Errorf("schematic used %d non-ASCII glyphs", bad)
+	}
+	spark, _ := frame(38*time.Second + 100*time.Millisecond)
+	if !strings.Contains(spark, "~") {
+		t.Error("throwing the switch should strike an arc")
+	}
+	small, _ := richBox(t, 60, 16, 35*time.Second, func(ctx *Context, box Rect) { drawCircuitRich(ctx, box, regs) })
+	if strings.Contains(small, "METERS") || strings.Contains(small, "PHASOR") {
+		t.Error("a narrow box should drop the phasor and the meters")
+	}
+}
+
+func TestIdentityFiguresAreRichAndASCII(t *testing.T) {
+	act := func(label, from, to string, at time.Duration) regEntry {
+		return regEntry{at: at, label: label, from: from, to: to}
+	}
+	cases := map[string]struct {
+		at   time.Duration
+		draw func(ctx *Context, box Rect)
+		want []string
+	}{
+		"clock": {stamp("1:35.0"), func(ctx *Context, box Rect) { drawClockRich(ctx, box, act("clock", "AM", "PM", stamp("1:33.90"))) },
+			[]string{"BCD", "00", "12", "AM -> PM"}},
+		"gender": {stamp("1:30.0"), func(ctx *Context, box Rect) { drawGenderRich(ctx, box, act("gender", "F", "M", stamp("1:28.71"))) },
+			[]string{"GENOME EDIT", "KARYOTYPE  XX", "SRY   OFF", "ESTROGEN", "TESTOSTERONE"}},
+		"role": {stamp("1:38.0"), func(ctx *Context, box Rect) { drawRoleRich(ctx, box, act("role", "S", "M", stamp("1:37.71"))) },
+			[]string{"role_a = S   role_b = M", "swap", "tension"}},
+		"trance": {stamp("1:42.0"), func(ctx *Context, box Rect) { drawTranceRich(ctx, box, act("trance", "OFF", "ON", stamp("1:41.40"))) },
+			[]string{"ENTER THE TRANCE", "theta="}},
+	}
+	for name, tc := range cases {
+		text, s := richBox(t, 120, 26, tc.at, tc.draw)
+		if cells, bad := countGlyphs(s); cells < 200 || bad != 0 {
+			t.Errorf("%s: %d cells, %d non-ASCII", name, cells, bad)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s lacks %q", name, want)
+			}
+		}
+		again, _ := richBox(t, 120, 26, tc.at, tc.draw)
+		if text != again {
+			t.Errorf("%s is not deterministic", name)
+		}
+		tiny, ts := richBox(t, 30, 8, tc.at, tc.draw)
+		if c, _ := countGlyphs(ts); c != 0 {
+			t.Errorf("%s should skip a tiny box, drew %d cells of %q", name, c, tiny)
+		}
+	}
+}
+
+func TestClockCrossesNoonAndTheGenderSymbolTurns(t *testing.T) {
+	clock := func(at time.Duration) string {
+		text, _ := richBox(t, 120, 26, at, func(ctx *Context, box Rect) {
+			drawClockRich(ctx, box, regEntry{at: stamp("1:33.90"), label: "clock", from: "AM", to: "PM"})
+		})
+		return text
+	}
+	if !strings.Contains(clock(stamp("1:34.0")), "DAYLIGHT") || !strings.Contains(clock(stamp("1:37.0")), "EVENING") {
+		t.Error("the icon should turn from day to evening as the clock passes noon")
+	}
+	gender := func(at time.Duration) string {
+		text, _ := richBox(t, 120, 26, at, func(ctx *Context, box Rect) {
+			drawGenderRich(ctx, box, regEntry{at: stamp("1:28.71"), label: "gender", from: "F", to: "M"})
+		})
+		return text
+	}
+	before, after := gender(stamp("1:30.0")), gender(stamp("1:33.0"))
+	if !strings.Contains(after, "KARYOTYPE  XY") || !strings.Contains(after, "SRY   ON") || before == after {
+		t.Error("the genome panel should flip from XX to XY with the symbol")
+	}
+	role := func(at time.Duration) string {
+		text, _ := richBox(t, 120, 26, at, func(ctx *Context, box Rect) {
+			drawRoleRich(ctx, box, regEntry{at: stamp("1:37.71"), label: "role", from: "S", to: "M"})
+		})
+		return text
+	}
+	if !strings.Contains(role(stamp("1:41.0")), "role_a = M   role_b = S") {
+		t.Error("the roles should have swapped after the exchange")
+	}
+}
+
+func paintedExtent(s *term.Screen, lastRow int) (x0, x1, y0, y1 int) {
+	x0, y0, x1, y1 = s.W, s.H, -1, -1
+	for y := 0; y <= lastRow; y++ {
+		for x := range s.W {
+			if r := s.At(x, y).R; r != ' ' && r != 0 {
+				x0, x1 = min(x0, x), max(x1, x)
+				y0, y1 = min(y0, y), max(y1, y)
+			}
+		}
+	}
+	return
+}
+
+func TestIdentityFiguresSitInTheMiddleOfTheirBox(t *testing.T) {
+	const w, h = 120, 26
+	figs := map[string]struct {
+		at   time.Duration
+		draw func(ctx *Context, box Rect)
+	}{
+		"clock": {stamp("1:35.0"), func(ctx *Context, box Rect) {
+			drawClockRich(ctx, box, regEntry{at: stamp("1:33.90"), label: "clock", from: "AM", to: "PM"})
+		}},
+		"gender": {stamp("1:30.0"), func(ctx *Context, box Rect) {
+			drawGenderRich(ctx, box, regEntry{at: stamp("1:28.71"), label: "gender", from: "F", to: "M"})
+		}},
+		"gender turned": {stamp("1:33.0"), func(ctx *Context, box Rect) {
+			drawGenderRich(ctx, box, regEntry{at: stamp("1:28.71"), label: "gender", from: "F", to: "M"})
+		}},
+		"role": {stamp("1:38.0"), func(ctx *Context, box Rect) {
+			drawRoleRich(ctx, box, regEntry{at: stamp("1:37.71"), label: "role", from: "S", to: "M"})
+		}},
+	}
+	for name, f := range figs {
+		_, s := richBox(t, w, h, f.at, f.draw)
+		x0, x1, y0, y1 := paintedExtent(s, h-2-4)
+		left, right := x0-2, (w-2)-1-x1
+		top, bottom := y0-2, (h-2-4)-y1
+		if d := left - right; d < -14 || d > 14 {
+			t.Errorf("%s is off centre horizontally: %d cells free on the left, %d on the right", name, left, right)
+		}
+		if left < 3 && name == "clock" {
+			t.Errorf("%s is jammed against the left edge (%d cells free)", name, left)
+		}
+		if top < 0 || bottom < 0 {
+			t.Errorf("%s spills out of its box vertically (%d, %d)", name, top, bottom)
+		}
+		if top > 6 && name != "role" || top+bottom > h {
+			t.Errorf("%s vertical margins look wrong: %d above, %d below", name, top, bottom)
+		}
+	}
+}
+
+func TestWideFiguresFillABigTerminal(t *testing.T) {
+	const w, h = 194, 44
+	figs := map[string]struct {
+		at   time.Duration
+		draw func(ctx *Context, box Rect)
+		want []string
+	}{
+		"clock": {stamp("1:35.0"), func(ctx *Context, box Rect) {
+			drawClockRich(ctx, box, regEntry{at: stamp("1:33.90"), label: "clock", from: "AM", to: "PM"})
+		}, []string{"WORLD CLOCK", "TOKYO", "NEW YORK", "SOLAR TRACK", "EPOCH", "BCD", "SUNRISE"}},
+		"gender": {stamp("1:30.0"), func(ctx *Context, box Rect) {
+			drawGenderRich(ctx, box, regEntry{at: stamp("1:28.71"), label: "gender", from: "F", to: "M"})
+		}, []string{"GENOME EDIT", "KARYOTYPE", "HORMONE LEVEL / TIME", "ESTROGEN"}},
+		"role": {stamp("1:38.0"), func(ctx *Context, box Rect) {
+			drawRoleRich(ctx, box, regEntry{at: stamp("1:37.71"), label: "role", from: "S", to: "M"})
+		}, []string{"HANDSHAKE", "DOMINANCE", "PHASE DIAGRAM", "tension"}},
+		"power": {1600 * time.Millisecond, func(ctx *Context, box Rect) { drawPowerArt(ctx, box, 1.6) },
+			[]string{"PINOUT", "SELF TEST", "CABLE", "MAINS 230V 50Hz", "[ CONNECTED ]", "V ["}},
+	}
+	for name, f := range figs {
+		text, s := richBox(t, w, h, f.at, f.draw)
+		cells, bad := countGlyphs(s)
+		area := (w - 4) * (h - 4)
+		if float64(cells)/float64(area) < 0.11 {
+			t.Errorf("%s fills only %d of %d cells (%.0f%%) of a big terminal", name, cells, area, 100*float64(cells)/float64(area))
+		}
+		if bad != 0 {
+			t.Errorf("%s used %d non-ASCII glyphs", name, bad)
+		}
+		for _, want := range f.want {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s lacks %q", name, want)
+			}
+		}
+		x0, x1, _, _ := paintedExtent(s, h-2-4)
+		if left, right := x0-2, (w-2)-1-x1; left < 2 || right < 2 {
+			t.Errorf("%s runs into an edge: %d cells free on the left, %d on the right", name, left, right)
+		}
+		again, _ := richBox(t, w, h, f.at, f.draw)
+		if text != again {
+			t.Errorf("%s is not deterministic", name)
+		}
+	}
+}
+
+func TestPowerLineConnects(t *testing.T) {
+	frame := func(at float64) string {
+		text, _ := richBox(t, 150, 34, time.Duration(at*float64(time.Second)), func(ctx *Context, box Rect) { drawPowerArt(ctx, box, at) })
+		return text
+	}
+	before, after := frame(0.3), frame(3.4)
+	if strings.Contains(before, "[ CONNECTED ]") || strings.Contains(before, "MAINS 230V") {
+		t.Error("nothing should be connected at the start")
+	}
+	if !strings.Contains(after, "MAINS 230V 50Hz") || !strings.Contains(after, "[ OK ] load") {
+		t.Error("the line should be live and the self test passed by the end")
+	}
+	if strings.Count(before, "~") >= strings.Count(after, "~") {
+		t.Error("the mains waveform should grow once connected")
+	}
+}
+
+func TestCalibrationCardFlashesOnTheClick(t *testing.T) {
+	card := NewCalibration("dark")
+	frame := func(at time.Duration, delay time.Duration) (string, *term.Screen) {
+		s := testScreen(100, 34)
+		ctx := &Context{Screen: s, Area: Rect{0, 2, 100, 30}, T: at, Delay: delay}
+		card.Draw(ctx)
+		return gridText(s), s
+	}
+	on, s := frame(3*CalibrationPeriod+10*time.Millisecond, 0)
+	off, _ := frame(3*CalibrationPeriod+250*time.Millisecond, 0)
+	before, _ := frame(3*CalibrationPeriod-30*time.Millisecond, 0)
+	if strings.Count(on, "#########") < 5 {
+		t.Error("the box should be filled just after a click")
+	}
+	if strings.Contains(off, "#########") || strings.Contains(before, "#########") {
+		t.Error("the box should be dark between clicks and just before one")
+	}
+	if first, _ := frame(10*time.Millisecond, 0); strings.Contains(first, "#########") {
+		t.Error("nothing should flash before the first click")
+	}
+	if !strings.Contains(off, "[ CLICK ]") || !strings.Contains(off, "click 0003") {
+		t.Error("the card should show its label and the click count")
+	}
+	if _, bad := countGlyphs(s); bad != 0 {
+		t.Errorf("the card used %d non-ASCII glyphs", bad)
+	}
+	shifted, _ := frame(time.Second, 20*time.Millisecond)
+	if !strings.Contains(shifted, "SYNC  +20 ms") {
+		t.Error("the card should show the current delay")
+	}
+	early, _ := frame(CalibrationPeriod/4, 0)
+	late, _ := frame(CalibrationPeriod*3/4, 0)
+	if early == late {
+		t.Error("the sweep marker should move")
+	}
+}
