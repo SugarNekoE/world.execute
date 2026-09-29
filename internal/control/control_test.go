@@ -32,6 +32,8 @@ func TestMapKeys(t *testing.T) {
 		{term.Key{Kind: term.KeyRune, Rune: 'm'}, ToggleMute},
 		{term.Key{Kind: term.KeyRune, Rune: 's'}, ToggleInfo},
 		{term.Key{Kind: term.KeyRune, Rune: '?'}, ToggleHelp},
+		{term.Key{Kind: term.KeyRune, Rune: '1'}, ChapterFirst},
+		{term.Key{Kind: term.KeyRune, Rune: '9'}, ChapterFirst + 8},
 		{term.Key{Kind: term.KeyRune, Rune: '['}, DelayLater},
 		{term.Key{Kind: term.KeyRune, Rune: ']'}, DelayEarlier},
 		{term.Key{Kind: term.KeyRune, Rune: '{'}, DelayLaterBig},
@@ -127,5 +129,19 @@ func TestShiftDelayMovesAndClamps(t *testing.T) {
 	}
 	if got := ShiftDelay(30*time.Millisecond, SeekForward); got != 30*time.Millisecond {
 		t.Errorf("unrelated action changed the delay: %v", got)
+	}
+}
+
+func TestChapterIndex(t *testing.T) {
+	for n := range ChapterCount {
+		got, ok := ChapterIndex(Map(term.Key{Kind: term.KeyRune, Rune: rune('1' + n)}))
+		if !ok || got != n {
+			t.Errorf("key %d gave chapter %d, %v", n+1, got, ok)
+		}
+	}
+	for _, a := range []Action{None, Quit, DelayEarlier, ChapterFirst + ChapterCount, ChapterFirst - 1} {
+		if _, ok := ChapterIndex(a); ok {
+			t.Errorf("action %d should not be a chapter", a)
+		}
 	}
 }

@@ -33,7 +33,12 @@ const (
 	DelayEarlier
 	DelayLaterBig
 	DelayEarlierBig
+	ChapterFirst
 )
+
+// ChapterCount is how many chapter keys there are, 1 to 9. Chapter actions
+// follow ChapterFirst in order.
+const ChapterCount = 9
 
 // Step sizes used by the seek actions.
 const (
@@ -115,6 +120,8 @@ func Map(k term.Key) Action {
 		return ToggleInfo
 	case '?', '/':
 		return ToggleHelp
+	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		return ChapterFirst + Action(k.Rune-'1')
 	case '[':
 		return DelayLater
 	case ']':
@@ -179,4 +186,13 @@ func ShiftDelay(delay time.Duration, a Action) time.Duration {
 		delay += DelayBigStep
 	}
 	return min(max(delay, -DelayLimit), DelayLimit)
+}
+
+// ChapterIndex reports which chapter, counted from zero, a chapter action
+// asks for.
+func ChapterIndex(a Action) (int, bool) {
+	if a < ChapterFirst || a >= ChapterFirst+ChapterCount {
+		return 0, false
+	}
+	return int(a - ChapterFirst), true
 }
