@@ -1,6 +1,8 @@
 package audio
 
 import (
+	"bytes"
+	"encoding/binary"
 	"math"
 	"math/cmplx"
 	"os"
@@ -246,5 +248,46 @@ func TestAnalysisFramesAreCentredOnTheirTimestamp(t *testing.T) {
 	}
 	if a.Energy[0] != 0 || a.Energy[a.Frames-1] != 0 {
 		t.Error("silence at the edges should have no energy")
+	}
+}
+
+func TestClickTrackClicksOnEveryPeriod(t *testing.T) {
+	var buf bytes.Buffer
+	if err := writeClickTrack(&buf, 3*time.Second, 500*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	b := buf.Bytes()
+	if string(b[0:4]) != "RIFF" || string(b[8:16]) != "WAVEfmt " || string(b[36:40]) != "data" {
+		t.Fatalf("not a WAV header: %q", b[:44])
+	}
+	if got := binary.LittleEndian.Uint32(b[24:]); got != clickRate {
+		t.Errorf("sample rate = %d", got)
+	}
+	samples := (len(b) - 44) / 2
+	if want := 3 * clickRate; samples != want {
+		t.Errorf("%d samples, want %d", samples, want)
+	}
+	pcm := func(at time.Duration, span time.Duration) (peak int) {
+		start := int(at.Seconds() * clickRate)
+		for i := range int(span.Seconds() * clickRate) {
+			v := int(int16(binary.LittleEndian.Uint16(b[44+2*(start+i):])))
+			if v < 0 {
+				v = -v
+			}
+			peak = max(peak, v)
+		}
+		return
+	}
+	if p := pcm(0, 400*time.Millisecond); p != 0 {
+		t.Errorf("the lead in should be silent, peak %d", p)
+	}
+	for _, k := range []int{1, 2, 3, 4, 5} {
+		at := time.Duration(k) * 500 * time.Millisecond
+		if p := pcm(at, 8*time.Millisecond); p < 10000 {
+			t.Errorf("click %d is too quiet or missing: peak %d", k, p)
+		}
+		if p := pcm(at+20*time.Millisecond, 400*time.Millisecond); p != 0 {
+			t.Errorf("silence after click %d has peak %d", k, p)
+		}
 	}
 }
