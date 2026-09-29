@@ -1,7 +1,9 @@
 package scene
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"world.execute/internal/term"
@@ -212,81 +214,67 @@ func drawObjectAnimation(ctx *Context, r Rect, spec objectSpec) {
 	if r.W < 22 || r.H < 7 {
 		return
 	}
+	pal := ctx.Palette
+	s := ctx.Screen
 	ctx.Panel(r)
 	motionLabel(ctx, r, spec.name+" / materializing")
 	r.Y++
 	r.H--
-	c := motionCanvas(ctx, r)
 	t := ctx.Since(spec.at).Seconds()
-	appear := ease(Progress(ctx.T, spec.at, spec.at+700*time.Millisecond))
-	cy := 0.48 + 0.03*math.Sin(t*3)
-	scale := 0.2 + 0.8*appear
-	for i := range 3 {
-		c.Circle(0.5, 0.86, 0.25+float64(i)*0.06, 0.16, i%3)
+	appear := ease(Progress(ctx.T, spec.at, spec.at+900*time.Millisecond))
+	beat := float64(ctx.Energy)
+
+	art := r
+	if r.H >= 8 {
+		art.Y, art.H = r.Y, r.H-2
 	}
-	for i := range 30 {
-		a := float64(i)*2.39996 + t*0.7
-		rad := 0.32 + 0.08*math.Sin(float64(i))
-		c.Set(0.5+rad*math.Cos(a), 0.5+0.36*math.Sin(a), i%3)
-	}
+	cx := float64(art.W) / 2
+	cy := float64(art.H) * (1 + 0.02*math.Sin(t*3))
+	R := math.Min(float64(art.W)*0.27, float64(art.H)*2*0.40) * (0.2 + 0.8*appear)
+	var shape asciiArt
 	switch spec.name {
 	case "Tomato":
-		c.Circle(0.5, cy, 0.23*scale, 1.15, 2)
-		for i := range 5 {
-			a := float64(i)*math.Pi*2/5 - t*0.2
-			c.Line(0.5, cy-0.25*scale, 0.5+0.12*math.Cos(a), cy-0.25*scale+0.06*math.Sin(a), 1)
-		}
+		shape = tomatoArt(pal, cx, cy, R, t)
 	case "Eggplant":
-		pts := make([]Point, 121)
-		for i := range pts {
-			a := float64(i) * math.Pi * 2 / 120
-			pts[i] = Point{0.5 + scale*(0.14*math.Cos(a)+0.09*math.Sin(a)), cy + 0.27*scale*math.Sin(a)}
-		}
-		c.Polyline(pts, 3)
-		c.Line(0.41, cy-0.27*scale, 0.47, cy-0.36*scale, 1)
+		shape = eggplantArt(pal, cx, cy, R, t)
 	case "TabbyCat":
-		c.Polyline([]Point{{0.29, cy + 0.17}, {0.29, cy - 0.24}, {0.4, cy - 0.11}, {0.6, cy - 0.11}, {0.71, cy - 0.24}, {0.71, cy + 0.17}, {0.5, cy + 0.26}, {0.29, cy + 0.17}}, 2)
-		blink := math.Mod(t, 2.7) > 2.5
-		for _, x := range []float64{0.4, 0.6} {
-			if blink {
-				c.Line(x-0.035, cy, x+0.035, cy, 1)
-			} else {
-				c.Circle(x, cy, 0.025, 1.6, 1)
-			}
-		}
-		for _, sign := range []float64{-1, 1} {
-			for i := range 3 {
-				c.Line(0.5+sign*0.08, cy+0.10, 0.5+sign*0.32, cy+float64(i)*0.08, 0)
-			}
-		}
-		c.Polyline([]Point{{0.47, cy + 0.07}, {0.5, cy + 0.11}, {0.53, cy + 0.07}}, 3)
+		shape = catArt(pal, cx, cy, R, t)
 	default:
-		c.Circle(0.5, cy-0.22, 0.22, 0.23, 2)
-		DrawHeart(c, 0.5, cy+0.05, 0.17, float64(ctx.Energy), 1)
-		for i := range 12 {
-			a := float64(i)*math.Pi/6 + t*0.5
-			c.Line(0.5+0.26*math.Cos(a), cy+0.29*math.Sin(a), 0.5+0.32*math.Cos(a), cy+0.36*math.Sin(a), 2)
-		}
+		shape = sunArt(pal, cx, cy, R, t, beat)
 	}
-	scan := math.Mod(t*0.45, 1)
-	c.Line(0.16, scan, 0.84, scan, 0)
+	box := shape.draw(ctx, art, t)
+
+	rows := []hudRow{
+		{"CLASS", strings.ToUpper(spec.name)},
+		{"CONF", fmt.Sprintf("0.%02d", 90+int(9*math.Abs(math.Sin(t*1.7))))},
+		{"HASH", fmt.Sprintf("%08X", uint32(hashSeed(ctx.Seed, len(spec.name)*977))&0xffffffff)},
+		{"STATE", "INSTANCE"},
+		{"YIELD", spec.gift},
+	}
+	drawHUD(ctx, art, box, "TARGET LOCK :: "+strings.ToUpper(spec.name), rows, appear, t)
+
 	if ctx.T >= spec.kwAt {
 		age := ctx.Since(spec.kwAt).Seconds()
-		for i := range 24 {
-			a := float64(i) * 2 * math.Pi / 24
-			rad := 0.1 + math.Mod(age*0.3+float64(i%3)*0.08, 0.35)
-			c.Set(0.5+rad*math.Cos(a), cy+rad*math.Sin(a), 1+i%3)
+		mx, my := box.X+box.W/2, box.Y+box.H/2
+		for i := range 28 {
+			a := float64(i) * 2 * math.Pi / 28
+			rad := 3 + math.Mod(age*22+float64(i%4)*2, 26)
+			x := mx + int(math.Round(rad*math.Cos(a)))
+			y := my + int(math.Round(rad*0.5*math.Sin(a)))
+			if x >= r.X && x < r.Right() && y >= r.Y && y < r.Bottom() {
+				s.Set(x, y, pickRune([]rune("*+.x"), i, int(age*10)), pal.Warn, term.ColorDefault, term.Bold)
+			}
 		}
 	}
 	if spec.name == "TabbyCat" && ctx.T >= stamp("1:23.64") {
+		my := box.Y + box.H/2
 		for i := range 3 {
-			rad := 0.25 + math.Mod(t*0.15+float64(i)*0.08, 0.2)
-			c.Arc(0.5, cy, rad, 1, -0.5, 0.5, 1)
-			c.Arc(0.5, cy, rad, 1, math.Pi-0.5, math.Pi+0.5, 1)
+			off := 2 + int(math.Mod(t*7+float64(i)*3, 9))
+			s.Text(box.Right()+off, my, ")", Fade(pal.Accent, pal.Shadow, 1-float64(off)/12), term.ColorDefault, term.Bold)
+			s.Text(box.X-off, my, "(", Fade(pal.Accent, pal.Shadow, 1-float64(off)/12), term.ColorDefault, term.Bold)
 		}
 	}
-	c.Flush()
-	ctx.Screen.TextWidth(r.X, r.Bottom()-1, r.W, "↑ "+spec.gift, ctx.Palette.Accent, term.ColorDefault, term.Bold)
+	s.TextWidth(r.X, r.Bottom()-1, r.W, "^ yield "+spec.gift+" / "+spec.destiny, pal.Accent, term.ColorDefault, term.Bold)
 }
 
 func drawHorizon(ctx *Context, r Rect) {

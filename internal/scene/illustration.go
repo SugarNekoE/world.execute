@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"world.execute/internal/term"
@@ -75,6 +76,7 @@ func (s *IllustratedScene) Draw(ctx *Context) {
 	t := ctx.Since(cue.at).Seconds()
 	drawIllustration(ctx, c, cue.kind, t)
 	c.Flush()
+	drawIllustrationArt(ctx, r, cue, t)
 	if cue.kind == "isolate" {
 		drawPingLog(ctx, r, cue)
 	}
@@ -126,31 +128,6 @@ func drawIllustration(ctx *Context, c *Canvas, kind string, t float64) {
 				c.Disc(math.Mod(t*0.5+float64(i)/18, 1), 0.5, 0.008, 2, 2)
 			}
 		}
-	case "shield":
-		c.Polyline([]Point{{0.5, 0.07}, {0.76, 0.23}, {0.70, 0.66}, {0.5, 0.94}, {0.30, 0.66}, {0.24, 0.23}, {0.5, 0.07}}, 1)
-		c.Polyline([]Point{{0.37, 0.48}, {0.47, 0.66}, {0.65, 0.30}}, 2)
-		for i := range 14 {
-			x := math.Mod(float64(i)/14+t*0.28, 1)
-			y := 0.08 + float64(i%7)*0.14
-			if x < 0.23 || x > 0.77 {
-				c.Line(x-0.02, y, x, y, 3)
-			}
-		}
-	case "assemble", "cage":
-		drawWireCube(c, t, kind == "assemble")
-		if kind == "cage" {
-			DrawHeart(c, 0.5, 0.5, 0.14, float64(ctx.Energy), 2)
-		}
-	case "world":
-		c.Circle(0.5, 0.5, 0.36, 1.2, 1)
-		for i := range 8 {
-			a := t*0.6 + float64(i)*math.Pi/8
-			c.Circle(0.5, 0.5, max(0.005, math.Abs(math.Cos(a))*0.36), 0.432/max(0.005, math.Abs(math.Cos(a))*0.36), 0)
-		}
-		for _, y := range []float64{-0.24, 0, 0.24} {
-			rx := 0.36 * math.Sqrt(1-y*y/(0.432*0.432))
-			c.Circle(0.5, 0.5+y, rx, 0.12, 2)
-		}
 	case "network", "isolate":
 		remaining := 8
 		if kind == "isolate" {
@@ -163,11 +140,9 @@ func drawIllustration(ctx *Context, c *Canvas, kind string, t float64) {
 				continue
 			}
 			c.Line(0.5, 0.5, x, y, 0)
-			c.Circle(x, y, 0.025, 1.4, 2)
 			p := math.Mod(t*0.9+float64(i)/8, 1)
 			c.Disc(0.5+(x-0.5)*p, 0.5+(y-0.5)*p, 0.014, 1.4, 1)
 		}
-		DrawHeart(c, 0.5, 0.5, 0.10, float64(ctx.Energy), 1)
 	case "satisfy":
 		for i := range 5 {
 			r := 0.09 + float64(i)*0.07
@@ -209,9 +184,6 @@ func drawIllustration(ctx *Context, c *Canvas, kind string, t float64) {
 			c.Arc(x, y+0.38, 0.12, 0.9, 0, math.Pi, 2)
 		}
 	case "error":
-		c.Polyline([]Point{{0.5, 0.06}, {0.84, 0.87}, {0.16, 0.87}, {0.5, 0.06}}, 2)
-		c.Line(0.5, 0.29, 0.5, 0.59, 1)
-		c.Disc(0.5, 0.74, 0.025, 1.3, 1)
 		c.Arc(0.5, 0.5, 0.46, 1, t, t+1.3, 3)
 	case "execute":
 		DrawBurst(c, math.Mod(t*1.6, 1))
@@ -221,25 +193,66 @@ func drawIllustration(ctx *Context, c *Canvas, kind string, t float64) {
 	}
 }
 
-func drawWireCube(c *Canvas, t float64, assembling bool) {
-	var points [8]Point
-	for i := range points {
-		x, y, z := float64(i&1)*2-1, float64(i>>1&1)*2-1, float64(i>>2&1)*2-1
-		a := t * 0.6
-		rx, rz := x*math.Cos(a)+z*math.Sin(a), z*math.Cos(a)-x*math.Sin(a)
-		scale := 1.0
-		if assembling {
-			scale += 0.6 * math.Exp(-t*2)
-		}
-		points[i] = Point{0.5 + rx*0.22*scale, 0.5 + (y*0.26+rz*0.10)*scale}
+func drawIllustrationArt(ctx *Context, r Rect, cue visualCue, t float64) {
+	if r.W < 30 || r.H < 8 {
+		return
 	}
-	for i, p := range points {
-		for bit := range 3 {
-			j := i ^ (1 << bit)
-			if j > i {
-				c.Line(p.X, p.Y, points[j].X, points[j].Y, 1+bit%2)
+	pal := ctx.Palette
+	art := r
+	art.H = r.H - 1
+	cx, cy := float64(art.W)/2, float64(art.H)
+	R := math.Min(float64(art.W)*0.20, float64(art.H)*2*0.40)
+	beat := float64(ctx.Energy)
+	var box Rect
+	title := ""
+	var rows []hudRow
+	progress := math.Min(t/6, 1)
+	switch cue.kind {
+	case "world":
+		box = globeArt(pal, cx, cy, R, t).draw(ctx, art, t)
+		title = "SIMULATION :: WORLD"
+		rows = []hudRow{{"LAT", fmt.Sprintf("%+06.2f", 40*math.Sin(t*0.7))}, {"LON", fmt.Sprintf("%+07.2f", math.Mod(t*28, 360)-180)}, {"TICK", fmt.Sprintf("%06d", int(t*60))}, {"STATE", "ONLINE"}}
+	case "assemble":
+		grow := ease(math.Min(t/1.6, 1))
+		shape := boxArt(pal, cx, cy, R*1.5*grow, R*0.85*grow, 113)
+		shape.feature = labelFeature(fmt.Sprintf("[ alloc 0x%04X ]", int(t*997)&0xffff), cx, cy, pal.Ink())
+		box = shape.draw(ctx, art, t)
+		title = "MEMORY :: ALLOCATE"
+		rows = []hudRow{{"SIZE", fmt.Sprintf("%d KB", int(64*grow))}, {"PAGE", "RW-"}, {"OWNER", "self"}}
+	case "cage":
+		cageArt(pal, cx, cy, R*1.05, t).draw(ctx, art, t)
+		box = heartArt(pal, cx, cy, R*0.62*(1+0.05*beat), pal.Accent).draw(ctx, art, t)
+		title = "CONTAINMENT :: SIMULATION"
+		rows = []hudRow{{"EXIT", "NONE"}, {"BARS", "ARMED"}, {"LOOP", "RECURSIVE"}}
+	case "shield":
+		box = shieldArt(pal, cx, cy, R).draw(ctx, art, t)
+		title = "PROTECTION :: SHIELD"
+		rows = []hudRow{{"INSUL", "OK"}, {"GND", "OK"}, {"LOAD", fmt.Sprintf("%02d%%", int(60+30*math.Sin(t*2)))}}
+	case "error":
+		box = warningArt(pal, cx, cy, R).draw(ctx, art, t)
+		title = "EXCEPTION :: REJECTED"
+		rows = []hudRow{{"CODE", "0xE1"}, {"ARG", "ILLEGAL"}, {"TRACE", "DUMPED"}}
+	case "network", "isolate":
+		remaining := 8
+		if cue.kind == "isolate" {
+			remaining = max(0, 8-int(t*1.25))
+		}
+		for i := range remaining {
+			a := float64(i)*math.Pi/4 + t*0.12
+			px := art.X + int(float64(art.W)*(0.5+0.39*math.Cos(a)))
+			py := art.Y + int(float64(art.H)*(0.5+0.40*math.Sin(a)))
+			col := pal.Accent2
+			if i%2 == 1 {
+				col = pal.Accent
 			}
+			ctx.Screen.Text(px-2, py, fmt.Sprintf("[N%d]", i), col, term.ColorDefault, term.Bold)
 		}
-		c.Disc(p.X, p.Y, 0.012, 1.4, 3)
+		box = heartArt(pal, cx, cy, R*0.55*(1+0.05*beat), pal.Accent).draw(ctx, art, t)
+		title = "LINK :: " + strings.ToUpper(cue.kind)
+		rows = []hudRow{{"NODES", fmt.Sprintf("%d/8", remaining)}, {"LOSS", fmt.Sprintf("%d%%", (8-remaining)*12)}}
+		progress = float64(remaining) / 8
+	default:
+		return
 	}
+	drawHUD(ctx, art, box, title, rows, progress, t)
 }

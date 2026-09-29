@@ -209,6 +209,7 @@ func (l *LoveScene) Draw(ctx *Context) {
 	}
 	box := Rect{X: area.X + 2, Y: area.Y, W: max(area.W-4, 1), H: max(area.H-2, 1)}
 	heart := NewCanvas(s, box, pal.Dim, pal.Accent, pal.Accent2)
+	solidHeart := false
 	if ctx.T >= stamp("3:04.77") {
 		heart.Line(0.05, 0.52, 0.95, 0.52, 0)
 		heart.Line(0.5, 0.03, 0.5, 0.97, 0)
@@ -218,9 +219,19 @@ func (l *LoveScene) Draw(ctx *Context) {
 		tip := path[count-1]
 		heart.Disc(tip.X, tip.Y, 0.012, 1, 1)
 	} else {
-		DrawHeart(heart, 0.5, 0.52, 0.46, beat, 2)
+		solidHeart = true
 	}
 	heart.Flush()
+	if solidHeart {
+		cx, cy := float64(box.W)/2, float64(box.H)*1.04
+		R := math.Min(float64(box.W)*0.20, float64(box.H)*2*0.42) * (1 + 0.06*beat)
+		bbox := heartArt(pal, cx, cy, R, pal.Accent).draw(ctx, box, ctx.Sec(ctx.T))
+		drawHUD(ctx, box, bbox, "HEART :: LO-O-OVE", []hudRow{
+			{"BPM", fmt.Sprintf("%03d", 68+int(24*beat))},
+			{"AMP", fmt.Sprintf("%.2f", 0.5+0.5*beat)},
+			{"STATE", "TRAPPED"},
+		}, beat, ctx.Sec(ctx.T))
+	}
 	if ctx.T >= stamp("3:04.77") {
 		formula := "x = 16 sin³(t)   y = 13 cos(t) - 5 cos(2t) - 2 cos(3t) - cos(4t)"
 		s.TextWidth(area.X+2, area.Bottom()-1, max(area.W-4, 1), formula, pal.Text, term.ColorDefault, term.Attr(0))
@@ -377,8 +388,10 @@ func (t *TrapScene) drawTrapped(ctx *Context, r Rect) {
 	}
 	box := Rect{X: r.X + 1, Y: r.Y + 1, W: max(r.W-2, 1), H: max(r.H-2, 1)}
 	cage := NewCanvas(s, box, pal.Dim, pal.Accent2, pal.Accent)
-	DrawCage(cage, closing, beat)
+	DrawCage(cage, closing)
 	cage.Flush()
+	R := math.Min(float64(box.W)*0.16, float64(box.H)*2*0.30) * (1 - 0.4*closing) * (1 + 0.05*beat)
+	heartArt(pal, float64(box.W)/2, float64(box.H), R, pal.Accent2).draw(ctx, box, ctx.Sec(ctx.T))
 }
 
 func lineBefore(track *lyric.Track, line lyric.Line) (lyric.Line, bool) {

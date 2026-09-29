@@ -273,20 +273,6 @@ func HeartPath(cx, cy, size float64, phase float64, samples int) []Point {
 	return pts
 }
 
-// DrawHeart draws a heart with a pulsing halo. The rings stay close together
-// so it still reads as a heart rather than a pattern.
-func DrawHeart(c *Canvas, cx, cy, size, beat float64, key int) {
-	scale := 1 + 0.1*beat
-	for ring := 2; ring >= 0; ring-- {
-		s := size * scale * (1 + 0.07*float64(ring))
-		k := key
-		if ring > 0 {
-			k = 0
-		}
-		c.Polyline(HeartPath(cx, cy, s, 0, 120), k)
-	}
-}
-
 // DrawScope draws a live waveform strip, which is what keeps the whole piece
 // moving even while a section is just text.
 func DrawScope(ctx *Context, r Rect, gain float64) {
@@ -329,15 +315,14 @@ func DrawMeter(ctx *Context, r Rect) {
 	}
 }
 
-// DrawCage draws bars closing in from both sides, with a heart inside.
-func DrawCage(c *Canvas, close float64, beat float64) {
+// DrawCage draws bars closing in from both sides.
+func DrawCage(c *Canvas, close float64) {
 	gap := math.Max(1-close, 0) * 0.5
 	for i := 0; i < 7; i++ {
 		x := float64(i) / 8 * (0.5 - gap)
 		c.Line(x, 0, x, 1, 1)
 		c.Line(1-x, 0, 1-x, 1, 1)
 	}
-	DrawHeart(c, 0.5, 0.5, 0.28*(1-0.4*close), beat, 2)
 }
 
 // DrawBurst draws expanding rings and spokes, used for every EXECUTION.
