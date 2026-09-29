@@ -174,6 +174,7 @@ Bar behaviour details:
 | `--theme` | `dark` | `dark` or `light`; body text inherits the terminal's foreground |
 | `--start` | `0` | start offset |
 | `--duration` | full | stop after this long |
+| `--charset` | `ascii` | `ascii` for plain ASCII art, `unicode` for blocks and braille |
 | `--delay` | saved value, else `0` | shifts the animation against the audio; positive shows it earlier, negative later. `[` `]` adjust it live and the value is remembered |
 | `--volume` | `80` | initial volume |
 | `--seed` | random | code rain seed |
@@ -320,6 +321,53 @@ what the lyric file leaves unsung.
 
 The monitor is dropped below 22 rows and stays clear of the telemetry strip;
 the verse readout is dropped below 64 columns.
+
+## 13h. ASCII objects and the hacker HUD
+
+The objects were thin outlines, and a shaded raster version looked like 3D
+graphics, which is the wrong feeling. Everything is now plain ASCII.
+
+- `asciiArt` draws a shape from a mask in unit space (x in cells, y in half rows,
+  so circles look round). Interior cells stream code: each column has its own
+  speed, the glyph at the head of a stream is bright and the trail fades, edge
+  cells use `@ # % & 8`, and a diagonal scanner band sweeps across. There is no
+  lighting and no shading. Feature glyphs are placed by hand: leaves and stems,
+  cat eyes, whiskers and nose, sun rays and a `<3` heart, the land and ocean of
+  the globe, a `#` check mark, a `!`.
+- Objects: tomato, eggplant, tabby cat, only-god sun, heart, rotating globe,
+  shield, warning triangle, memory block with a live `alloc` label, cage.
+- `drawHUD` wraps an object in corner brackets that breathe, a crosshair with
+  tick marks, a title, live readouts, a hex dump scrolling up the left and a
+  progress bar. It is used in the objects section, the boot, chorus,
+  abandonment and panic illustrations and the love heart.
+- The love heart and the trapped cage draw their hearts with `0 1 < 3`.
+- Data streams replaced the flowing ribbons: rows of hex, addresses and packet
+  words scroll through free cells with a travelling bright band.
+- `--charset ascii` (the default) maps every remaining decorative glyph at write
+  time: box drawing and blocks become `# - | / \ . : =`, arrows and symbols become
+  their ASCII look-alikes, and braille line art becomes strokes chosen from the dot
+  pattern. Wide glyphs such as Chinese lyrics are untouched. `--charset unicode`
+  keeps the original glyphs. The screen buffer always holds the original glyph.
+- A test renders the whole song with the ASCII charset and checks that every
+  byte written is ASCII.
+
+## 13g. Cinematic effects
+
+A layer of effects on top of the scenes. Each is driven by the audio or the
+lyrics, and none may overwrite or hide text.
+
+| Effect | What it does |
+| --- | --- |
+| Data streams | Rows of hex, addresses and packet words scroll through the free cells, alternating direction, each with a bright band travelling along it. |
+| Sparks | Each shouted keyword throws eighteen sparks from the middle that arc and fall over 1.5 s, beside the shockwave ring. |
+| Chromatic split | For a quarter of a second after a big hit the picture is copied one or two cells left in the error colour and right in the cyan accent, only into blank cells. |
+| Word flash | A word is drawn in reverse for its first 110 ms. |
+| Scramble decode | A section's name in the header decodes out of noise, left to right, over about half a second. |
+| Vignette | Coloured cells fade towards the shadow colour near the edges by up to 42%, never closer to the background than a fixed distance, and cells in the terminal's own colours are untouched. |
+
+The contrast test scans the whole song in both themes, so a new effect that
+buries text fails it. A frame costs about 0.28 ms, under 2% of the frame
+budget.
 
 ## 13f. Chapters and single-file use
 

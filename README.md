@@ -91,6 +91,31 @@ driven by the audio:
   a **system monitor** or **memory dump** beside the boot and panic logs — so
   nothing on screen is ever static.
 
+The main objects are drawn as **dense ASCII art**. Each one is a shape filled
+with streaming code: every column falls at its own speed through hex, binary and
+symbols, the outline is drawn in heavy glyphs, and a scanner band sweeps across.
+A tomato with a calyx, an eggplant, a tabby cat with `@` eyes and whiskers, a sun
+with a `<3` heart, a rotating character-map Earth, a shield with a `#` check
+mark, a warning triangle, a hex-filled memory block and a heart made of `0 1 < 3`
+all get the same treatment, wrapped in the furniture of a targeting system:
+corner brackets that breathe, a crosshair with tick marks, a hex dump scrolling
+up the side, live readouts and a progress bar.
+
+On top of the scenes, a layer of cinematic effects, all driven by the music and
+the lyrics and all careful never to touch the text:
+
+- **data streams**: rows of hex, addresses and packet words (`0xDEADBEEF`,
+  `SYN`, `192.168.0.13:443`) scroll through the empty space, alternating
+  direction, with a bright band travelling along each;
+- **shockwave rings and falling sparks** that leave the centre every time a
+  shouted word such as DIMENSION or EXECUTION is sung;
+- a **chromatic split** on the big hits, where the picture separates into a red
+  and a cyan ghost for a moment;
+- every sung word **flashes** as it lands, and each section's name **decodes**
+  out of noise in the header;
+- a soft **vignette** towards the edges, a **wipe** between sections, and a CRT
+  **power-on** at the start and **power-off** at the final execution.
+
 ## Controls
 
 The transport bar sits at the bottom of the screen and the key hints fade away
@@ -131,6 +156,7 @@ which backend it picked when it starts.
 | `--theme` | `dark` | `dark` or `light`; text inherits your terminal's own foreground |
 | `--start` | `0` | start offset |
 | `--duration` | whole track | stop after this much playback |
+| `--charset` | `ascii` | `ascii` writes plain ASCII only, so blocks, braille and box lines become `# - | / \ .`; `unicode` keeps them |
 | `--delay` | saved value, else `0` | shifts the animation against the audio (positive earlier, negative later); `[` `]` adjust it live and it is remembered |
 | `--volume` | `80` | initial volume |
 | `--seed` | clock | seed for the code rain |
