@@ -101,6 +101,31 @@ all get the same treatment, wrapped in the furniture of a targeting system:
 corner brackets that breathe, a crosshair with tick marks, a hex dump scrolling
 up the side, live readouts and a progress bar.
 
+The geometry and the mechanisms get the same density: the circle sweeps out a
+sector of streaming hex while the digits of pi are written along its
+circumference and a degree ring counts round; the sine wave has axes, a code
+filled area, live tangent slopes and a scanning cursor; `self.converges(Infinity)`
+closes an epsilon band on a dashed asymptote with a growing table of values and
+a rotating lemniscate; the AC/DC switch is a working schematic: a spinning generator feeds a knife
+switch that throws, with a spark, from a direct AC line to a DC branch made of a
+rectifier bridge and a charging capacitor, beside a phasor circle that locks in
+place, V I P gauges, a spectrum whose peak moves from 50 Hz to 0 Hz, and a
+three-trace oscilloscope showing input, rectified and smoothed voltage; the heart is erased cell by cell into falling debris with an `rm` log;
+and the scales of judgment tilt under weights labelled `YOUR GOD` and
+`ILLEGAL ARGUMENTS` until a verdict appears. The gender, clock and role switches
+are just as busy: an `F` disc of streaming code whose stem swings round into
+an arrow as an `M`, beside a genome panel that flips `XX` to `XY` with
+hormone bars; a numbered analog clock racing through noon with block digits, a
+sun that becomes a moon, BCD lights and a 24 hour timeline; two discs of code
+orbiting and trading the letters `S` and `M`; and a double helix of `@` and `o`
+with base-pair rungs under hypnotic rings.
+
+On a big terminal the busiest scenes grow with the space instead of floating in
+it: the power line at the start is a plug and socket of streaming code with a
+spark on contact, a pinout table and a self test; the clock adds a world clock, a
+sun track and an epoch ticker; gender adds chromosomes and a hormone chart; role
+adds a handshake log, dominance bars and a phase diagram.
+
 On top of the scenes, a layer of cinematic effects, all driven by the music and
 the lyrics and all careful never to touch the text:
 
@@ -157,6 +182,7 @@ which backend it picked when it starts.
 | `--start` | `0` | start offset |
 | `--duration` | whole track | stop after this much playback |
 | `--charset` | `ascii` | `ascii` writes plain ASCII only, so blocks, braille and box lines become `# - | / \ .`; `unicode` keeps them |
+| `--calibrate` | off | play a click track and a test card to tune the sync with `[` `]`; the value is saved |
 | `--delay` | saved value, else `0` | shifts the animation against the audio (positive earlier, negative later); `[` `]` adjust it live and it is remembered |
 | `--volume` | `80` | initial volume |
 | `--seed` | clock | seed for the code rain |
@@ -216,7 +242,10 @@ The storyboard, the exact timings and the design decisions are in
 - **The picture is too dark or too bright.** `--theme light` is for terminals
   with a light background. `--color 256` helps when truecolor is reported but
   not honoured.
-- **Audio and picture are slightly apart.** Press `[` or `]` while it plays to
+- **Audio and picture are slightly apart.** Run `world.execute --calibrate`: it
+  plays a click track and shows a flash and a sweeping bar timed to each click.
+  Press `]` if the flash comes after the click, `[` if it comes before (`{` `}`
+  for 50 ms), then `q` to save. Or press `[` or `]` during the song itself to
   move the animation 10 ms later or earlier (`{` `}` for 50 ms). Only the
   animation moves, never the audio, and the value is remembered for the next
   run. `--delay -0.05s` or `--delay 0.05s` sets it from the command line.

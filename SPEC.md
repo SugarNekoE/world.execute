@@ -175,6 +175,7 @@ Bar behaviour details:
 | `--start` | `0` | start offset |
 | `--duration` | full | stop after this long |
 | `--charset` | `ascii` | `ascii` for plain ASCII art, `unicode` for blocks and braille |
+| `--calibrate` | off | click track and test card for tuning the sync |
 | `--delay` | saved value, else `0` | shifts the animation against the audio; positive shows it earlier, negative later. `[` `]` adjust it live and the value is remembered |
 | `--volume` | `80` | initial volume |
 | `--seed` | random | code rain seed |
@@ -350,6 +351,84 @@ graphics, which is the wrong feeling. Everything is now plain ASCII.
   keeps the original glyphs. The screen buffer always holds the original glyph.
 - A test renders the whole song with the ASCII charset and checks that every
   byte written is ASCII.
+
+## 13j. Calibration
+
+The analysis path was measured again against real audio: beat triggers land a
+median of +2 ms from the spectral flux onsets, and the cue timestamps sit within
++-15 ms of them, so what is left is the output latency of the viewer's speakers
+and terminal, which only the viewer can judge.
+
+`--calibrate` generates a four minute click track (a 1.5 kHz burst of 8 ms every
+500 ms, silent in between, written to a temporary WAV) and plays it through the
+normal player. A test card shows a box that fills for 90 ms on every click, a bar
+whose marker reaches the right end exactly on the click, the current delay, and
+which key to press: `]` if the flash comes after the click, `[` if before, `{` `}`
+for 50 ms. `q` saves the value like any other run and the temporary file is
+removed. Nothing is analysed and no lyrics are loaded.
+
+## 13i. Rich figures
+
+The circle, sine wave, limit, AC/DC switch, erased heart and judgment scales were
+thin strokes. Each is now a dense ASCII composition (`richart.go`) built from a
+few helpers: `stage` clips drawing to a box, and `strokeGlyph` picks `- | / \`
+for a segment allowing for cells being twice as tall as wide.
+
+- Circle: the swept sector is filled with streaming hex, a ring of degree ticks
+  is labelled every 30, the radius line ends in a `theta=` readout, and the
+  digits of pi are written along the circumference as it is measured.
+- Sine: axes, grid and tick labels, a thick curve above a code filled area, a
+  faint second harmonic, sample stems, tangent segments with their slope, and a
+  scanning cursor reading `y`. Frequency follows the treble.
+- Limit: a log axis, a curve approaching a dashed asymptote through an epsilon
+  band that shrinks, a live `x`, `f` and difference readout, a table of
+  `f(10^k)` that grows, and a rotating lemniscate made of `8`.
+- AC/DC: a schematic (`drawCircuitRich`, in a box at least 96 wide and 17 tall,
+  with the compact loop as the fallback). A generator with spinning spokes feeds
+  an SPDT knife switch whose blade throws over 450 ms, striking an arc of `~`
+  and scattering sparks. One branch is a direct AC line, the other a rectifier
+  bridge and a smoothing capacitor whose charge bar fills. The load lamp
+  flickers on AC and glows steadily on DC, and electrons jitter then drift along
+  whichever branch is live. Beside it a phasor circle projects the sine and locks
+  in place on DC, V I P gauges and a ten-bin spectrum move their peak from 50 Hz
+  to 0 Hz, and a three-trace oscilloscope keeps a 3.4 second history of input,
+  rectified and output voltage so the change scrolls past. The shutters and the
+  dizzy arcs after it are unchanged.
+- Gender, clock, role and trance (same box rule, compact drawing as fallback):
+  the `F` disc is code with its stem swinging round to an arrow as an `M`, while
+  a genome panel shows karyotype `XX` to `XY`, the SRY gene and hormone bars. The
+  clock is a numbered analog face racing through noon with block digits, a sun
+  that becomes a moon, BCD lights and a 24 hour timeline. The role figure is two
+  discs of code, lettered `S` and `M`, orbiting and swapping on a tether. The
+  trance is a double helix of `@` and `o` with base-pair rungs under expanding
+  rings.
+- Erasing the heart: a `0 1 < 3` heart loses random cells as the section goes on,
+  each falling away as debris, with an `rm heart/aorta_032 [DEL]` log and an
+  erased percentage.
+- Judgment: a balance with a tilting beam, chains, pans labelled `YOUR GOD` and
+  `ILLEGAL ARGUMENTS` holding stacks of `[####]`, a code filled pillar, a base and
+  a verdict that changes.
+- Composition is balanced: the clock face and its readouts, the gender symbol and
+  its genome panel, and the circuit with its phasor and meters are each centred
+  as a group in their box (only the oscilloscope and the timeline span the full
+  width), the symbol is centred vertically allowing for its stem or arrow, and
+  the role readouts are centred above the orbit. A test measures the free space
+  either side of each figure.
+- Big terminals: the figures were built with small caps, which left them floating
+  in empty space on a 200 by 60 terminal. The clock, gender and role figures have
+  wide layouts (150 columns and 26 rows or more) that scale with the space and add
+  panels. The clock gets a large face, double width block digits, a four city
+  world clock with day and night bars, a sun and moon track with sunrise and
+  sunset, an epoch and Julian date ticker and the full width timeline. Gender
+  gets a bigger symbol, an X and Y chromosome ideogram that morphs, and a
+  time series chart of estrogen and testosterone. Role gets bigger orbiting discs,
+  a scrolling handshake log, dominance bars and a live phase diagram. The power
+  line at the start is rebuilt the same way: a plug and a socket filled with
+  streaming code whose prongs slide together with a spark, a braided cable with
+  electrons, a mains waveform that grows once connected, a pinout table, a
+  self test checklist and V I P gauges. A test requires each wide figure to fill
+  at least 11% of a big box.
+- All of them sit in the HUD frame and use only ASCII.
 
 ## 13g. Cinematic effects
 
